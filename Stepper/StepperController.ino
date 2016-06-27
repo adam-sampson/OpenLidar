@@ -1,5 +1,5 @@
-/*     Simple Stepper Motor Control Exaple Code
- *      
+/*     Simple Stepper Motor Control Example Code
+ *     Modified to include additional controls
  *  
  */
 #define DEBUG
