@@ -15,6 +15,7 @@
  *     liable for any damages incurred through the use of this information.
  *     
  *     SD card attached to the SPI BUss
+ *     ** NOTE: This REQUIRES >100 mA of current. This cannot run off the trinket pro 5V pin.
  *       MOSI - Pin 11
  *       MISO - Pin 12
  *       CLK - Pin 13
@@ -69,6 +70,11 @@ const int fallDelay = 250;
 int myYawSteps = 400;  // This is a 400 step motor
 int myPitchSteps = 400 * 4;  // This is a 400 step motor on quarter step mode
 
+// define SD card variables
+File myFile;
+boolean mySdStatus = 0;
+const int slaveSelect = 10; // Pin 10 is the chip select pin
+
 void setup() {
   // put your setup code here, to run once:
   // Set serial for bluetooth
@@ -80,8 +86,38 @@ void setup() {
   pinMode(dirPin2,OUTPUT);
   pinMode(stepPin2,OUTPUT); 
 
+  // Sets the Hall Effect pin at Input
   pinMode(digHall,INPUT);
-  // Sets the 
+
+  // Set up the SD card
+  pinMode(slaveSelect,OUTPUT); //attempting to prevent hardware from setting Arduino as Slave
+  DEBUG_PRINTLN("Initilazing SD card...");
+  if (!SD.begin(4)) {
+    DEBUG_PRINTLN("Initialization Failed.");
+    mySdStatus = 0;
+  }
+  else {
+    DEBUG_PRINTLN("Initialization Complete.");
+    mySdStatus = 1; 
+  }
+  if (SD.exists("DEBUG.txt")) {
+    DEBUG_PRINTLN("DEBUG.txt exists, deleting file");
+    SD.remove("DEBUG.txt");
+    if (SD.exists("DEBUG.txt")) {
+      DEBUG_PRINTLN("Delete failed.");
+    }
+    else {
+      DEBUG_PRINTLN("Delete succeeded.");
+    }
+  }
+  DEBUG_PRINTLN("Creating fresh DEBUG.txt");
+  myFile = SD.open("DEBUG.txt", FILE_WRITE);
+  myFile.close();
+
+  if (SD.exists("DEBUG.txt")) {
+    DEBUG_PRINTLN("DEBUG.txt created");
+  }
+  
 }
 
 void loop() {
@@ -92,7 +128,7 @@ void loop() {
   unsigned long microcounter;
   microcounter = micros();
 
-  //delay(10000); // 10 second delay to get hands out of the way
+  delay(10000); // 10 second delay to get hands out of the way
 
   // Collect the hall effect state
   digHallState = digitalRead(digHall);
@@ -114,10 +150,30 @@ for(int yy = 0; yy < myYawSteps; yy++) {
     }
 */
 
+  DEBUG_PRINT("SD Status: ");
+  DEBUG_PRINT(mySdStatus);
+  DEBUG_PRINT("  ");
   DEBUG_PRINT("Digital Hall State: ");
   DEBUG_PRINTLN(digHallState);
   //DEBUG_PRINT(" , ");
   //DEBUG_PRINTLN(anHallState);
+  
+  // re-open the file for writing
+  myFile = SD.open("DEBUG.txt", FILE_WRITE);
+
+  // if the file opened okay, write to it
+  if (myFile) {
+    DEBUG_PRINTLN("Printing to file");
+    myFile.print("SD Status: ");
+    myFile.print(mySdStatus);
+    myFile.print("  ");
+    myFile.print("Digital Hall State: ");
+    myFile.println(digHallState);
+    myFile.close(); // Make sure to close the file to save changes.
+  }
+  else {
+    DEBUG_PRINTLN("Error opening file to write.");
+  }
 }
 
 void StepMotorForward(int myStepPin, int myDirPin){
