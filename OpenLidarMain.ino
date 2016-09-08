@@ -1,6 +1,19 @@
 /*     Open Lidar Project Code
  *     Author: Adam Sampson
  *     
+ *     License: The software in this project is licensed under the GPLv3 lisence. The 
+ *     hardware is licensed under the TARP Open Hardware License v1.0. 
+ *     
+ *     Acknowledgements - This project uses commonly available tutorials and libraries. 
+ *     The code has been modified to meet the needs of the project. This project has been 
+ *     made possible by the generous work of everyone in the open source community. As such
+ *     it is only fair to make this project open source.
+ *     
+ *     Disclaimer - This code comes without any warranty or guarantee. The software and 
+ *     hardware schematics are provided AS-IS and are for reference use only. Any user is 
+ *     responsible for verifying the capabilities within their needs. The author is not 
+ *     liable for any damages incurred through the use of this information.
+ *     
  *     SD card attached to the SPI BUss
  *       MOSI - Pin 11
  *       MISO - Pin 12
@@ -74,7 +87,7 @@ void setup() {
 void loop() {
   // Set variables
   boolean digHallState = 0;
-  int anHallState = 0;
+  //int anHallState = 0;
   
   unsigned long microcounter;
   microcounter = micros();
@@ -83,7 +96,7 @@ void loop() {
 
   // Collect the hall effect state
   digHallState = digitalRead(digHall);
-  anHallState = analogRead(anaHall);
+  //anHallState = analogRead(anaHall);
 
 // For each full rotation of the pitch motor run the yaw motor one step
 /*
