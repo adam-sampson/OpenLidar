@@ -26,19 +26,31 @@
  *       RX - Pin 0 on Artuino to TX on Bluetooth Module
  *     
  *     Hall Effect digital out connected to the A0 pin
- *       D0 - Pin A3
+ *       D0 - Pin A2
+ *     
+ *     Motor Common Pin
+ *      SLP/RST - Pin 8 //High to enable A4988 board, Low to sleep
+ *      MS1 - Pin 9
+ *      MS2 - Pin A3
+ *          **************************
+ *          *              MS1   MS2 * 
+ *          *Full Step     Low   Low *
+ *          *Half Step     High  Low *
+ *          *Quarter Step  Low   High*
+ *          *Eighth Step   High  High*
+ *          **************************
  *     
  *     Motor 1 connected to digital output pins
- *       Step - Pin 3
- *       Direction - Pin 4
+ *       Step - Pin 4
+ *       Direction - Pin 3
  *     
  *     Motor 2 connected to digital output pins
- *       Step - Pin 5
- *       Direction - Pin 6
+ *       Step - Pin 6
+ *       Direction - Pin 5
  *     
  *     SF30-B connected to digital input/output pins through SoftwareSerial
- *       ? - Pin A0 as Input
- *       ? - Pin A1 as Ouptput
+ *       ? - Pin A0 as ??
+ *       ? - Pin A1 as ??
  */
 
 #include <SPI.h>
@@ -54,21 +66,29 @@
  #define DEBUG_PRINTLN(x)
 #endif
 
-#define BAUD (9600)
+#define BAUD (115200)
+// define an array of characters to read serial into
+String serialData;
 
 // define pins numbers
-const int stepPin1 = 3; // motor 1 step pin
-const int dirPin1 = 4;  // motor 1 direction pin
-const int stepPin2 = 5; // motor 2 step pin 
-const int dirPin2 = 6;  // motor 2 direction pin
-const int digHall = A3; // digital hall effect pin
-//const int anaHall = A2; // analog hall effect pin
+const int slpPin = 8;
+const int MS1Pin = 9;
+const int MS2Pin = A3;
+
+const int stepPin1 = 4; // motor 1 step pin
+const int dirPin1 = 3;  // motor 1 direction pin
+const int stepPin2 = 6; // motor 2 step pin 
+const int dirPin2 = 5;  // motor 2 direction pin
+const int digHall = A2; // digital hall effect pin
 
 // define motor profile
-const int riseDelay = 250;
-const int fallDelay = 250;
-int myYawSteps = 400;  // This is a 400 step motor
-int myPitchSteps = 400 * 4;  // This is a 400 step motor on quarter step mode
+const int riseDelay1 = 125;
+const int fallDelay1 = 125;
+const int riseDelay2 = 1200; 
+const int fallDelay2 = 1200;
+
+int myYawSteps = 400*8;  // This is a 400 step motor with Eighth Steps
+int myPitchSteps = 400*8;  // This is a 400 step motor with Eight Steps
 
 // define SD card variables
 File myFile;
@@ -77,9 +97,19 @@ const int slaveSelect = 10; // Pin 10 is the chip select pin
 
 void setup() {
   // put your setup code here, to run once:
-  // Set serial for bluetooth
+  // Set serial for bluetooth (or FTDI)
   Serial.begin(BAUD);
 
+  // Set motors to sleep mode to conserve power
+  pinMode(slpPin,OUTPUT);
+  digitalWrite(slpPin,LOW);
+
+  // Set common motor pins to default Eighth Step Mode 
+  pinMode(MS1Pin,OUTPUT);
+  pinMode(MS2Pin,OUTPUT);
+  digitalWrite(MS1Pin,HIGH);
+  digitalWrite(MS2Pin,HIGH);
+  
   // Sets the motor driver pins as Outputs
   pinMode(dirPin1,OUTPUT);
   pinMode(stepPin1,OUTPUT); 
@@ -100,63 +130,124 @@ void setup() {
     DEBUG_PRINTLN("Initialization Complete.");
     mySdStatus = 1; 
   }
-  if (SD.exists("DEBUG.txt")) {
-    DEBUG_PRINTLN("DEBUG.txt exists, deleting file");
-    SD.remove("DEBUG.txt");
+  if (mySdStatus == 1) {
     if (SD.exists("DEBUG.txt")) {
-      DEBUG_PRINTLN("Delete failed.");
+      DEBUG_PRINTLN("DEBUG.txt exists, deleting file");
+      SD.remove("DEBUG.txt");
+      if (SD.exists("DEBUG.txt")) {
+        DEBUG_PRINTLN("Delete failed.");
+      }
+      else {
+        DEBUG_PRINTLN("Delete succeeded.");
+      }
     }
-    else {
-      DEBUG_PRINTLN("Delete succeeded.");
-    }
-  }
-  DEBUG_PRINTLN("Creating fresh DEBUG.txt");
-  myFile = SD.open("DEBUG.txt", FILE_WRITE);
-  myFile.close();
 
-  if (SD.exists("DEBUG.txt")) {
-    DEBUG_PRINTLN("DEBUG.txt created");
+    DEBUG_PRINTLN("Creating fresh DEBUG.txt");
+    myFile = SD.open("DEBUG.txt", FILE_WRITE);
+    myFile.close();
+  
+    if (SD.exists("DEBUG.txt")) {
+      DEBUG_PRINTLN("DEBUG.txt created");
+    }
   }
   
 }
 
 void loop() {
   // Set variables
-  boolean digHallState = 0;
-  //int anHallState = 0;
-  
   unsigned long microcounter;
   microcounter = micros();
 
-  delay(10000); // 10 second delay to get hands out of the way
+  //delay(10000); // 10 second delay to get hands out of the way
 
-  // Collect the hall effect state
-  digHallState = digitalRead(digHall);
-  //anHallState = analogRead(anaHall);
+  //Listen for bluetooth commands
+  while(Serial.available()) {
+    serialData = Serial.readString(); //read incoming data as a string
+    DEBUG_PRINT("OL recieved: ");
+    DEBUG_PRINTLN(serialData);
+  }
 
-// For each full rotation of the pitch motor run the yaw motor one step
-/*
-for(int yy = 0; yy < myYawSteps; yy++) { 
-    // Run the Pitch motor forward 1 partial rotation
-    for(int x = 0; x < myPitchSteps; x++) {
-      StepMotorForward(stepPin1,dirPin1);
-      //delay(1);
-      delayMicroseconds(250);
+  //Decide what to do with the command recieved
+  if(serialData == "TMTM") {
+    for (int j = 0; j < 1; j++) {  //test the motor j times.
+    // Make sure they aren't sleeping
+    digitalWrite(slpPin,HIGH);
+    delay(500);
+    // Test motor 1 for 20 steps at default quarter step of 0.9deg
+    TestMotor(1,myPitchSteps);
+    delay(500);
+    //Test motor 2 for 20 steps at default quarter step of 0.9deg
+    TestMotor(2,myYawSteps);
+    delay(500);
     }
+
+    // Put the motor to sleep to save power
+    digitalWrite(slpPin,LOW);
+
+    //Unset the command string so we don't repeat next loop
+    serialData = "";
+  }
+  else if (serialData == "SRSR") {
+    scanRoom();  
+  }
+}
+
+boolean readHall() {
+  boolean digHallState = 0;
+  return digitalRead(digHall);
+  DEBUG_PRINT("Digital Hall State: ");
+  DEBUG_PRINTLN(digHallState);
+}
+
+void StepMotorForward(int Motor){
+  //temp variables
+  int tempStepPin;
+  int tempDirPin;
+
+  switch(Motor) {
+    case 1:
+      tempStepPin = stepPin1;
+      tempDirPin = dirPin1;
+      digitalWrite(tempDirPin,HIGH);
+      digitalWrite(tempStepPin,HIGH);
+      delayMicroseconds(riseDelay1);
+      digitalWrite(tempStepPin,LOW);
+      delayMicroseconds(fallDelay1);
+      break;
+    case 2:
+      tempStepPin = stepPin2;
+      tempDirPin = dirPin2;
+      digitalWrite(tempDirPin,HIGH);
+      digitalWrite(tempStepPin,HIGH);
+      delayMicroseconds(riseDelay2);
+      digitalWrite(tempStepPin,LOW);
+      delayMicroseconds(fallDelay2);
+      break;
+    default: //we only have two motors...cancel if something else selected
+      return;
+      break;
+  }
   
-    // Run the Yaw motor forward 1 step
-      StepMotorForward(stepPin2,dirPin2);
-      delayMicroseconds(250);
-    }
-*/
+  
 
+}
+
+void TestMotor(int Motor, int Steps) {
+  //Make sure the motors are not sleeping
+  digitalWrite(slpPin,HIGH);
+
+  //
+  for (int i=0; i <= Steps; i++) {
+    StepMotorForward(Motor);
+  }
+}
+
+
+
+void TestWriteToSD() {
   DEBUG_PRINT("SD Status: ");
   DEBUG_PRINT(mySdStatus);
   DEBUG_PRINT("  ");
-  DEBUG_PRINT("Digital Hall State: ");
-  DEBUG_PRINTLN(digHallState);
-  //DEBUG_PRINT(" , ");
-  //DEBUG_PRINTLN(anHallState);
   
   // re-open the file for writing
   myFile = SD.open("DEBUG.txt", FILE_WRITE);
@@ -165,10 +256,7 @@ for(int yy = 0; yy < myYawSteps; yy++) {
   if (myFile) {
     DEBUG_PRINTLN("Printing to file");
     myFile.print("SD Status: ");
-    myFile.print(mySdStatus);
-    myFile.print("  ");
-    myFile.print("Digital Hall State: ");
-    myFile.println(digHallState);
+    myFile.println(mySdStatus);
     myFile.close(); // Make sure to close the file to save changes.
   }
   else {
@@ -176,11 +264,24 @@ for(int yy = 0; yy < myYawSteps; yy++) {
   }
 }
 
-void StepMotorForward(int myStepPin, int myDirPin){
-  digitalWrite(myDirPin,HIGH);
-  digitalWrite(myStepPin,HIGH);
-  delayMicroseconds(riseDelay);
-  digitalWrite(myStepPin,LOW);
-  delayMicroseconds(fallDelay);
+void scanRoom() {
+   //Make sure the motors are not sleeping
+  digitalWrite(slpPin,HIGH);
+  
+  // For each full rotation of the pitch motor run the yaw motor one step
+  for(int yy = 0; yy < myYawSteps; yy++) { 
+    // Run the Pitch motor forward 1 partial rotation
+    for(int x = 0; x < myPitchSteps; x++) {
+      StepMotorForward(1);
+      //delay should be included in rise/fall delay
+    }
+  
+    // Run the Yaw motor forward 1 step since the pitch has run a full rotation
+      StepMotorForward(2);
+      //delay should be included in rice/fall delay
+  }
+
+  //Put the motors back to sleep to save power
+  digitalWrite(slpPin,LOW);
 }
 
