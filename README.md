@@ -9,6 +9,9 @@ This is a work in progress and has been submitted to the Hackaday Prize. https:/
 
 The current status of the software is that it is capable of:
 - Controlling 2 stepper motors
-- Checking a switching hall effect sensor to detect pitch motor placement
+- Checking a switching hall effect sensor to detect magnet or no magnet
 - Writing to a microSD card
+- Creating a unique file name on the SD card
 - Connecting to a computer via Bluetooth (and outputing serial data)
+- Receiving a few commands from a computer/phone over bluetooth
+- Reading data from the SF30 module
