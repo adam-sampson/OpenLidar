@@ -15,3 +15,20 @@ The current status of the software is that it is capable of:
 - Connecting to a computer via Bluetooth (and outputing serial data)
 - Receiving a few commands from a computer/phone over bluetooth
 - Reading data from the SF30 module
+
+Future items needed
+- Fix scanRoom known bugs
+- Add capability for scanRoom to scan at user defined multiple resolutions
+- Add filter to prevent scanRoom from over-sampling near polar regions
+- Optimize speed of motors
+- Add ability to read/write settings to ROM
+- Add ability to change default settings
+- Synchronize motor timing with SF30 reading
+- Create progress indicators and time estimates
+- Add ability to save as E57 point cloud file
+- Add routine for using hall switch to identify start point and blind spot
+- Add ability to create custom filename (i.e. date and time)
+- Improve Bluetooth speed and latency
+- Statistically evaluate SF30 data
+- Create optional per/pitch smoothing algorithm for SF30 data (built in smoothing doesn't start over when switching to a new direction)
+- Identify proper warm-up time for sensor
