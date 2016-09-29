@@ -111,6 +111,9 @@ File myFile;
 boolean mySdStatus = 0;
 const int slaveSelect = 10; // Pin 10 is the chip select pin
 
+/*
+* Setup Function - Run once
+*/
 void setup() {
   // put your setup code here, to run once:
   // Set serial for bluetooth (or FTDI)
@@ -191,6 +194,9 @@ void setup() {
   
 }
 
+/*
+* Loop Function - Run forever
+*/
 void loop() {
   // Set variables
   unsigned long microcounter;
@@ -238,6 +244,9 @@ void loop() {
   }
 }
 
+/*
+* readHall function - return 0 or 1 depending on magnet presence
+*/
 boolean readHall() {
   boolean digHallState = 0;
   return digitalRead(digHall);
@@ -245,6 +254,11 @@ boolean readHall() {
   DEBUG_PRINTLN(digHallState);
 }
 
+/*
+* StepMotorForward function - move selected motor forward 1 step
+* Currently allows motor 1 or motor 2 as inputs only. 
+* Motor movement delay is coded through micro counter
+*/
 void StepMotorForward(int Motor){
   //temp variables
   int tempStepPin;
@@ -285,7 +299,9 @@ void StepMotorForward(int Motor){
   }
   
   
-
+/*
+* TestMotor function - basic test that motors are working
+*/
 }
 
 void TestMotor(int Motor, int Steps) {
@@ -298,8 +314,9 @@ void TestMotor(int Motor, int Steps) {
   }
 }
 
-
-
+/*
+* TestWriteToSD function - debugging purposes to see if SD works
+*/
 void TestWriteToSD() {
   DEBUG_PRINT("SD Status: ");
   DEBUG_PRINT(mySdStatus);
@@ -320,6 +337,10 @@ void TestWriteToSD() {
   }
 }
 
+/*
+* TestSF30 Function - See if we can read from the SF30 sensor
+* Read the sensor 10 times and report over serial debug
+*/
 void TestSF30() {
   int isSfData = 0; 
 
@@ -336,8 +357,6 @@ void TestSF30() {
   }
   DEBUG_PRINTLN("Cleared old data");
   delayMicroseconds(500);
-
-  
 
   DEBUG_PRINTLN("Beginning SF30 Reading");
   delay(1); //let bluetooth catch up
@@ -363,6 +382,10 @@ void TestSF30() {
   DEBUG_PRINT("Turned off SF30");
 }
 
+/*
+* warmupSF30 function - warm up the sensor to get more precise readings
+* run 30 seconds to warm up
+*/
 void warmupSF30 () {
   //Warm up the sensor by running it for 30 seconds.
   unsigned long warmupCounter;
@@ -391,6 +414,9 @@ void warmupSF30 () {
   DEBUG_PRINT("Warmed up");
 }
 
+/*
+* scanRoom function - what we've been waiting for...actually scan the room
+*/
 void scanRoom() {
   DEBUG_PRINTLN("Starting room scan");
   //delay(1); //let bluetooth catch up
@@ -411,7 +437,7 @@ void scanRoom() {
   DEBUG_PRINTLN("Start SD card");
   //delay(1); //let bluetooth catch up
   // Write the headers in our SD file
-  scanFilename = createNewFile();
+  scanFilename = createNewFileName();
   if (!SD.begin(4)) {
     DEBUG_PRINTLN("SD init. Failed.");
     return; //If we can't use SD card then quit.
@@ -503,10 +529,14 @@ void scanRoom() {
 
   //Put the motors back to sleep to save power
   digitalWrite(slpPin,LOW);
-  
 }
 
-String createNewFile() {
+/*
+* createNewFile function - as name says
+* Check to see if file is taken and increment until unique name is found
+* Return file name for use.
+*/
+String createNewFileName() {
   //This is a quick and dirty way to make sure a new file is created.
   //In the future ROM will be used to track file numbers.
   
