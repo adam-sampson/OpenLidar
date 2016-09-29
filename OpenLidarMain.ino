@@ -49,12 +49,13 @@
  *       Direction - Pin 5
  *     
  *     SF30-B connected to digital input/output pins through SoftwareSerial
- *       ? - Pin A0 as ??
- *       ? - Pin A1 as ??
+ *       Rx Arduino - TXD SF30 (yellow) - Pin A0 as INPUT
+ *       Tx Arduino - RXD SF30 (orange) - Pin A1 as OUTPUT
  */
 
 #include <SPI.h>
 #include <SD.h>
+#include <SoftwareSerial.h>
 
 #define DEBUG
 
@@ -66,8 +67,18 @@
  #define DEBUG_PRINTLN(x)
 #endif
 
-#define BAUD (115200)
-// define an array of characters to read serial into
+#define TerminalBAUD 9600  //38400    //Baud rate of serial or bluetooth output
+#define serial_Rxd A0         //Pin definitions to match wiring to SF30
+#define serial_Txd A1
+#define sf30BAUD 38400        //SF30 baud rate
+
+SoftwareSerial sf30_serial(serial_Rxd, serial_Txd);
+
+// define variables to read into from SF30 laser distance
+float sfDistance;
+int Byte_L, Byte_H;
+
+// define an array of characters to read serial into for bluetooth commands
 String serialData;
 
 // define pins numbers
@@ -82,10 +93,14 @@ const int dirPin2 = 5;  // motor 2 direction pin
 const int digHall = A2; // digital hall effect pin
 
 // define motor profile
-const int riseDelay1 = 125;
-const int fallDelay1 = 125;
-const int riseDelay2 = 1200; 
-const int fallDelay2 = 1200;
+const int riseDelay1 = 2;
+const int fallDelay1 = 2;
+const int riseDelay2 = 2; 
+const int fallDelay2 = 2;
+const unsigned long pitchMotDelay = 300;
+const unsigned long yawMotDelay = 2400; 
+unsigned long pitchMotMicroCounter; 
+unsigned long yawMotMicroCounter; 
 
 int myYawSteps = 400*8;  // This is a 400 step motor with Eighth Steps
 int myPitchSteps = 400*8;  // This is a 400 step motor with Eight Steps
@@ -98,11 +113,28 @@ const int slaveSelect = 10; // Pin 10 is the chip select pin
 void setup() {
   // put your setup code here, to run once:
   // Set serial for bluetooth (or FTDI)
-  Serial.begin(BAUD);
+  Serial.begin(TerminalBAUD);
+  //while (!Serial);  //Wait for serial before doing anything else
+
+  //Setup the SF30
+  sf30_serial.begin(sf30BAUD);
+  //By Default we turn off the SF30 so it isn't running while we are in standby
+  sf30_serial.print("#N");
+  DEBUG_PRINTLN("Turned off SF30");
+  sf30_serial.print("#R3:");  //Set the measurement resolution to 0.03m NOT smoothed
+  sf30_serial.print("#U1665:");  //Set the measurement rate to 1665 per second
+  sf30_serial.print("#p0:");  //Set the output to distance in meters.
+  DEBUG_PRINT("SF set to 0.03m ");
+  DEBUG_PRINT("resolution (unsmoothed) ");
+  DEBUG_PRINTLN("at 1665 times/second");
 
   // Set motors to sleep mode to conserve power
   pinMode(slpPin,OUTPUT);
   digitalWrite(slpPin,LOW);
+
+  // Set motor delay variables
+  pitchMotMicroCounter = micros();
+  yawMotMicroCounter = micros (); 
 
   // Set common motor pins to default Eighth Step Mode 
   pinMode(MS1Pin,OUTPUT);
@@ -116,7 +148,7 @@ void setup() {
   pinMode(dirPin2,OUTPUT);
   pinMode(stepPin2,OUTPUT); 
 
-  // Sets the Hall Effect pin at Input
+  // Sets the Hall Effect pin as Input
   pinMode(digHall,INPUT);
 
   // Set up the SD card
@@ -132,7 +164,8 @@ void setup() {
   }
   if (mySdStatus == 1) {
     if (SD.exists("DEBUG.txt")) {
-      DEBUG_PRINTLN("DEBUG.txt exists, deleting file");
+      DEBUG_PRINTLN("DEBUG.txt exists. Able to read/write SD card.");
+      /*DEBUG_PRINTLN("Deleting file.");
       SD.remove("DEBUG.txt");
       if (SD.exists("DEBUG.txt")) {
         DEBUG_PRINTLN("Delete failed.");
@@ -140,14 +173,16 @@ void setup() {
       else {
         DEBUG_PRINTLN("Delete succeeded.");
       }
+      */
     }
-
-    DEBUG_PRINTLN("Creating fresh DEBUG.txt");
-    myFile = SD.open("DEBUG.txt", FILE_WRITE);
-    myFile.close();
+  else {
+      DEBUG_PRINTLN("Creating fresh DEBUG.txt");
+      myFile = SD.open("DEBUG.txt", FILE_WRITE);
+      myFile.close();
   
-    if (SD.exists("DEBUG.txt")) {
-      DEBUG_PRINTLN("DEBUG.txt created");
+      if (SD.exists("DEBUG.txt")) {
+        DEBUG_PRINTLN("DEBUG.txt created. Able to read/write SD card.");
+      }
     }
   }
   
@@ -168,7 +203,7 @@ void loop() {
   }
 
   //Decide what to do with the command recieved
-  if(serialData == "TMTM") {
+  if(serialData.startsWith("TestMotors")) {
     for (int j = 0; j < 1; j++) {  //test the motor j times.
     // Make sure they aren't sleeping
     digitalWrite(slpPin,HIGH);
@@ -187,8 +222,16 @@ void loop() {
     //Unset the command string so we don't repeat next loop
     serialData = "";
   }
-  else if (serialData == "SRSR") {
-    scanRoom();  
+  else if (serialData.startsWith("ScanRoom")) {
+    delay(1);
+    scanRoom(); 
+    //Unset the command string so we don't repeat next loop
+    serialData = ""; 
+  }
+  else if (serialData.startsWith("TestSF30")) {
+    TestSF30();
+    //Unset the command string so we don't repeat next loop
+    serialData = "";
   }
 }
 
@@ -206,6 +249,9 @@ void StepMotorForward(int Motor){
 
   switch(Motor) {
     case 1:
+      while (micros() - pitchMotMicroCounter < pitchMotDelay) {
+        //wait until enough time has passed before trying to move the motor again without using delay
+      }
       tempStepPin = stepPin1;
       tempDirPin = dirPin1;
       digitalWrite(tempDirPin,HIGH);
@@ -213,8 +259,13 @@ void StepMotorForward(int Motor){
       delayMicroseconds(riseDelay1);
       digitalWrite(tempStepPin,LOW);
       delayMicroseconds(fallDelay1);
+      //reset the counter to new time
+      pitchMotMicroCounter = micros();
       break;
     case 2:
+      while (micros() - yawMotMicroCounter < yawMotDelay) {
+        //wait until enough time has passed before trying to move the motor again without using delay
+      }
       tempStepPin = stepPin2;
       tempDirPin = dirPin2;
       digitalWrite(tempDirPin,HIGH);
@@ -222,6 +273,8 @@ void StepMotorForward(int Motor){
       delayMicroseconds(riseDelay2);
       digitalWrite(tempStepPin,LOW);
       delayMicroseconds(fallDelay2);
+      //reset the counter to new time
+      yawMotMicroCounter = micros();
       break;
     default: //we only have two motors...cancel if something else selected
       return;
@@ -264,24 +317,199 @@ void TestWriteToSD() {
   }
 }
 
+void TestSF30() {
+  int isSfData = 0; 
+
+  // Start the SF30
+  sf30_serial.print("#Y");
+  DEBUG_PRINTLN("Turned on SF30");
+  
+  //clear the buffer to avoid earlier readings
+  while (sf30_serial.available() > 0) {
+    Byte_H = sf30_serial.read();
+    while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+    Byte_L = sf30_serial.read();
+    //do nothing with this data, but throw it away as old data
+  }
+  DEBUG_PRINTLN("Cleared old data");
+  delayMicroseconds(500);
+
+  
+
+  DEBUG_PRINTLN("Beginning SF30 Reading");
+  sf30_serial.available();
+  for(int tt = 0; tt < 10; tt++) {
+    if (sf30_serial.available() > 0) {
+      while (!sf30_serial.available());
+      Byte_H = sf30_serial.read();
+      while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+      Byte_L = sf30_serial.read();
+      sfDistance = (float(Byte_L))/256 + Byte_H;
+      DEBUG_PRINT("Distance in meters = ");
+      DEBUG_PRINTLN(sfDistance);
+      isSfData += 1; 
+    }
+    delayMicroseconds(500); //delay 700us before next reading
+  }
+  if (isSfData == 0) {
+    DEBUG_PRINTLN("No data collected from SF30");
+  }
+  sf30_serial.print("#N");
+  DEBUG_PRINT("Turned off SF30");
+}
+
+void warmupSF30 () {
+  //Warm up the sensor by running it for 30 seconds.
+  unsigned long warmupCounter;
+  
+  // Start the SF30
+  sf30_serial.print("#Y");
+  warmupCounter = millis();
+  DEBUG_PRINTLN("Turned on SF30");
+
+  DEBUG_PRINTLN("Beginning SF30 Reading");
+  sf30_serial.available();
+  while (millis() - warmupCounter < 30000) {
+    if (sf30_serial.available() > 0) {
+      while (!sf30_serial.available());
+      Byte_H = sf30_serial.read();
+      while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+      Byte_L = sf30_serial.read();
+      sfDistance = (float(Byte_L))/256 + Byte_H;
+      //DEBUG_PRINT("Distance in meters = ");
+      //DEBUG_PRINTLN(sfDistance); 
+    }
+  }
+  sf30_serial.print("#N");
+  
+  DEBUG_PRINT("Warmed up");
+}
+
 void scanRoom() {
-   //Make sure the motors are not sleeping
+  DEBUG_PRINTLN("Starting scan room");
+  delay(1);
+  
+  //Make sure the motors are not sleeping
   digitalWrite(slpPin,HIGH);
+  float range;
+  float azimuth;
+  float polar;
+  float degPerYawStep = float(360)/myYawSteps;
+  float degPerPitchStep = float(360)/myPitchSteps;
+  String scanFilename;
+
+  DEBUG_PRINTLN("Starting SF30 Warmup");
+  delay(1);
+  warmupSF30();
+
+  DEBUG_PRINTLN("Starting SD card");
+  delay(1);
+  // Write the headers in our SD file
+  scanFilename = createNewFile();
+  if (!SD.begin(4)) {
+    DEBUG_PRINTLN("SD initialization Failed.");
+    return; //If we can't use SD card then quit.
+  }
+
+  myFile = SD.open(scanFilename, FILE_WRITE);
+  myFile.print("Range,Azimuth,Polar");
+  myFile.close();
+
+  DEBUG_PRINTLN("Ready to begin scanning for real");
+  delay(1);
   
   // For each full rotation of the pitch motor run the yaw motor one step
   for(int yy = 0; yy < myYawSteps; yy++) { 
-    // Run the Pitch motor forward 1 partial rotation
+    // Open the SD card to write to
+    // open the sd card every yaw loop and close at end to make sure to save data
+    myFile = SD.open(scanFilename, FILE_WRITE);
+        
+    if (!SD.exists("scanFilename")) {
+     DEBUG_PRINTLN("Can access SD card, but can't open new file");
+     return;
+    }
+
+    // Calculate the azimuth for this loop
+    azimuth = float(yy)*degPerYawStep;
+    
+    // Clear the SF30 memory in case delays have caused a queue
+    while (sf30_serial.available() > 0) {
+      Byte_H = sf30_serial.read();
+      while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+      Byte_L = sf30_serial.read();
+      //do nothing with this data, but throw it away as old data
+    }
+    DEBUG_PRINTLN("Cleared old data");
+  
+    // Run the Pitch motor forward 1 rotation
     for(int x = 0; x < myPitchSteps; x++) {
+      // Take a measurement
+      while (sf30_serial.available() > 2) { //If there are more than 1 measurement to be read
+        Byte_H = sf30_serial.read();
+        while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+        Byte_L = sf30_serial.read();
+        //do nothing with this data, but throw it away as old data
+      }
+      
+      while (!sf30_serial.available()); //wait for next bit to be available
+      Byte_H = sf30_serial.read();
+      while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+      Byte_L = sf30_serial.read();
+      range = (float(Byte_L))/256 + Byte_H;
+      polar = float(yy)*degPerPitchStep;
+      
+      //Then move the motor forward 1 immediately after measurement
       StepMotorForward(1);
-      //delay should be included in rise/fall delay
+
+      // Write to SD card after moving motor to allow settling and measurement time
+      myFile.print(range);
+      myFile.print(",");
+      myFile.print(azimuth);
+      myFile.print(",");
+      myFile.println(polar);
     }
   
     // Run the Yaw motor forward 1 step since the pitch has run a full rotation
       StepMotorForward(2);
-      //delay should be included in rice/fall delay
+
+    // Close the file to save it
+      myFile.close();  
+
+    // Check for a cancel command
+    while(Serial.available()) {
+    serialData = Serial.readString(); //read incoming data as a string
+    DEBUG_PRINT("OL recieved: ");
+    DEBUG_PRINTLN(serialData);
+    }
+
+    //Decide what to do with the command recieved
+    if(serialData.startsWith("Cancel")) {
+      DEBUG_PRINTLN("Cancel command received.");
+      return;
+    }
+        
   }
 
   //Put the motors back to sleep to save power
   digitalWrite(slpPin,LOW);
+  
+}
+
+String createNewFile() {
+  //This is a quick and dirty way to make sure a new file is created.
+  //In the future ROM will be used to track file numbers.
+  
+  String baseFilename = "OL";
+  String tempFilename;
+
+  for (int fileNumber = 1; fileNumber < 9999; fileNumber++) {
+    tempFilename = baseFilename + fileNumber + ".csv";
+    if (!SD.exists(tempFilename)) {  //if the file doesn't exist, return the name
+      DEBUG_PRINT("Found new filename: ");
+      DEBUG_PRINTLN(tempFilename);
+      return tempFilename;
+    }
+  }
+  DEBUG_PRINTLN("Found files OL1 to OL9999. Clear SD card."); 
 }
 
