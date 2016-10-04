@@ -57,6 +57,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <SoftwareSerial.h>
+#include <MemoryFree.h>
 
 #define DEBUG
 
@@ -83,33 +84,34 @@ int Byte_L, Byte_H;
 String serialData;
 
 // define pins numbers
-const int slpPin = 8;
-const int MS1Pin = 9;
-const int MS2Pin = A3;
+const int PROGMEM slpPin = 8;
+const int PROGMEM MS1Pin = 9;
+const int PROGMEM MS2Pin = A3;
 
-const int stepPin1 = 4; // motor 1 step pin
-const int dirPin1 = 3;  // motor 1 direction pin
-const int stepPin2 = 6; // motor 2 step pin 
-const int dirPin2 = 5;  // motor 2 direction pin
-const int digHall = A2; // digital hall effect pin
+const int PROGMEM stepPin1 = 4; // motor 1 step pin
+const int PROGMEM dirPin1 = 3;  // motor 1 direction pin
+const int PROGMEM stepPin2 = 6; // motor 2 step pin 
+const int PROGMEM dirPin2 = 5;  // motor 2 direction pin
+const int PROGMEM digHall = A2; // digital hall effect pin
 
 // define motor profile
-const int riseDelay1 = 2;
-const int fallDelay1 = 2;
-const int riseDelay2 = 2; 
-const int fallDelay2 = 2;
-const unsigned long pitchMotDelay = 300;
-const unsigned long yawMotDelay = 2400; 
-unsigned long pitchMotMicroCounter; 
+const int PROGMEM riseDelay1 = 2;
+const int PROGMEM fallDelay1 = 2;
+const int PROGMEM riseDelay2 = 2; 
+const int PROGMEM fallDelay2 = 2;
+const unsigned long PROGMEM pitchMotDelay = 300;
+const unsigned long PROGMEM yawMotDelay = 2400; 
+unsigned long  pitchMotMicroCounter; 
 unsigned long yawMotMicroCounter; 
 
-int myYawSteps = 400*8;  // This is a 400 step motor with Eighth Steps
-int myPitchSteps = 400*8;  // This is a 400 step motor with Eight Steps
+int myYawSteps = 400*4;  // This is a 400 step motor with Eighth Steps
+int myPitchSteps = 400*4;  // This is a 400 step motor with Eight Steps
 
 // define SD card variables
 File myFile;
-boolean mySdStatus = 0;
-const int slaveSelect = 10; // Pin 10 is the chip select pin
+//boolean mySdStatus = 0;
+const int PROGMEM slaveSelect = 10; // Pin 10 is the chip select pin
+const int PROGMEM readingsPerWrite = 320;
 
 /*
 * Setup Function - Run once
@@ -124,13 +126,13 @@ void setup() {
   sf30_serial.begin(sf30BAUD);
   //By Default we turn off the SF30 so it isn't running while we are in standby
   sf30_serial.print("#N");
-  DEBUG_PRINTLN("Turned off SF30");
-  sf30_serial.print("#R3:");  //Set the measurement resolution to 0.03m NOT smoothed
-  sf30_serial.print("#U1665:");  //Set the measurement rate to 1665 per second
-  sf30_serial.print("#p0:");  //Set the output to distance in meters.
-  DEBUG_PRINT("SF set to 0.03m ");
-  DEBUG_PRINT("resol. (unsmooth) ");
-  DEBUG_PRINTLN("1665 times/second");
+  //DEBUG_PRINTLN("Turned off SF30");
+  sf30_serial.print(F("#R3:"));  //Set the measurement resolution to 0.03m NOT smoothed
+  sf30_serial.print(F("#U1665:"));  //Set the measurement rate to 1665 per second
+  sf30_serial.print(F("#p0:"));  //Set the output to distance in meters.
+  //DEBUG_PRINT("SF set to 0.03m ");
+  //DEBUG_PRINT("resol. (unsmooth) ");
+  //DEBUG_PRINTLN("1665 times/second");
 
   // Set motors to sleep mode to conserve power
   pinMode(slpPin,OUTPUT);
@@ -155,22 +157,24 @@ void setup() {
   // Sets the Hall Effect pin as Input
   pinMode(digHall,INPUT);
 
+ 
   // Set up the SD card
   pinMode(slaveSelect,OUTPUT); //attempting to prevent hardware from setting Arduino as Slave
-  DEBUG_PRINTLN("Initilazing SD card...");
-  if (!SD.begin(4)) {
-    DEBUG_PRINTLN("Initialization Failed.");
-    mySdStatus = 0;
+  //DEBUG_PRINTLN(F("Initilazing SD card..."));
+  if (!SD.begin(slaveSelect)) {
+    DEBUG_PRINTLN(F("SD Init Failed."));
+    //mySdStatus = 0;
   }
   else {
-    DEBUG_PRINTLN("Init. Complete.");
-    mySdStatus = 1; 
+    DEBUG_PRINTLN(F("SD Init. Complete."));
+    //mySdStatus = 1; 
   }
+  /*
   if (mySdStatus == 1) {
     if (SD.exists("DEBUG.txt")) {
       DEBUG_PRINTLN("DEBUG.txt exists. Able to read/write SD card.");
-      delay(1); //let bluetooth catch up
-      /*DEBUG_PRINTLN("Deleting file.");
+      delay(100); //let bluetooth catch up
+      DEBUG_PRINTLN("Deleting file.");
       SD.remove("DEBUG.txt");
       if (SD.exists("DEBUG.txt")) {
         DEBUG_PRINTLN("Delete failed.");
@@ -178,20 +182,27 @@ void setup() {
       else {
         DEBUG_PRINTLN("Delete succeeded.");
       }
-      */
+      
     }
   else {
-      DEBUG_PRINTLN("Creating fresh DEBUG.txt");
+      //DEBUG_PRINTLN("Creating fresh DEBUG.txt");
       myFile = SD.open("DEBUG.txt", FILE_WRITE);
       myFile.close();
   
       if (SD.exists("DEBUG.txt")) {
-        DEBUG_PRINTLN("DEBUG.txt created. Able to read/write SD card.");
+        //DEBUG_PRINTLN("DEBUG.txt created. Able to read/write SD card.");
         delay(1); //let bluetooth catch up
       }
     }
   }
-  
+  */
+  /*
+  if (SD.exists(F("DEBUG.txt"))) {  //if the file doesn't exist, return the name
+      DEBUG_PRINTLN(F("Found Debug.txt"));
+      delay(100);
+    }
+  */
+  DEBUG_PRINTLN(F("Setup complete"));
 }
 
 /*
@@ -201,18 +212,19 @@ void loop() {
   // Set variables
   unsigned long microcounter;
   microcounter = micros();
+  String testFilename;
 
   //delay(10000); // 10 second delay to get hands out of the way
 
   //Listen for bluetooth commands
   while(Serial.available()) {
     serialData = Serial.readString(); //read incoming data as a string
-    DEBUG_PRINT("OL recieved: ");
+    //DEBUG_PRINT("OL recieved: ");
     DEBUG_PRINTLN(serialData);
   }
 
   //Decide what to do with the command recieved
-  if(serialData.startsWith("TestMotors")) {
+  if(serialData.startsWith(F("TestMotors"))) {
     for (int j = 0; j < 1; j++) {  //test the motor j times.
     // Make sure they aren't sleeping
     digitalWrite(slpPin,HIGH);
@@ -231,15 +243,25 @@ void loop() {
     //Unset the command string so we don't repeat next loop
     serialData = "";
   }
-  else if (serialData.startsWith("ScanRoom")) {
+  else if (serialData.startsWith(F("ScanRoom"))) {
     delay(1);
     scanRoom(); 
     //Unset the command string so we don't repeat next loop
     serialData = ""; 
   }
-  else if (serialData.startsWith("TestSF30")) {
+  else if (serialData.startsWith(F("TestSF30"))) {
     TestSF30();
     //Unset the command string so we don't repeat next loop
+    serialData = "";
+  }
+  else if (serialData.startsWith(F("TestSD"))) {
+    if (SD.exists("DEBUG.txt")) {  //if the file doesn't exist, return the name
+      DEBUG_PRINTLN(F("Found DEBUG.txt"));
+      delay(100);
+    }
+    testFilename = createNewFileName();
+    DEBUG_PRINT(F("Created file: "));
+    DEBUG_PRINTLN(testFilename);
     serialData = "";
   }
 }
@@ -250,8 +272,8 @@ void loop() {
 boolean readHall() {
   boolean digHallState = 0;
   return digitalRead(digHall);
-  DEBUG_PRINT("Digital Hall State: ");
-  DEBUG_PRINTLN(digHallState);
+  //DEBUG_PRINT("Digital Hall State: ");
+  //DEBUG_PRINTLN(digHallState);
 }
 
 /*
@@ -317,25 +339,28 @@ void TestMotor(int Motor, int Steps) {
 /*
 * TestWriteToSD function - debugging purposes to see if SD works
 */
+/*
 void TestWriteToSD() {
-  DEBUG_PRINT("SD Status: ");
-  DEBUG_PRINT(mySdStatus);
-  DEBUG_PRINT("  ");
+  //DEBUG_PRINT("SD Status: ");
+  //DEBUG_PRINT(mySdStatus);
+  //DEBUG_PRINT("  ");
   
   // re-open the file for writing
   myFile = SD.open("DEBUG.txt", FILE_WRITE);
 
   // if the file opened okay, write to it
   if (myFile) {
-    DEBUG_PRINTLN("Printing to file");
-    myFile.print("SD Status: ");
-    myFile.println(mySdStatus);
+    //DEBUG_PRINTLN("Printing to file");
+    myFile.println(F("File Found"));
+    //myFile.println(mySdStatus);
     myFile.close(); // Make sure to close the file to save changes.
   }
   else {
-    DEBUG_PRINTLN("Error opening file to write.");
+    DEBUG_PRINTLN(F("Error test SD"));
   }
+  DEBUG_PRINTLN(F("SD pass"));
 }
+*/
 
 /*
 * TestSF30 Function - See if we can read from the SF30 sensor
@@ -346,7 +371,7 @@ void TestSF30() {
 
   // Start the SF30
   sf30_serial.print("#Y");
-  DEBUG_PRINTLN("Turned on SF30");
+  //DEBUG_PRINTLN("Turned on SF30");
   
   //clear the buffer to avoid earlier readings
   while (sf30_serial.available() > 0) {
@@ -355,10 +380,10 @@ void TestSF30() {
     Byte_L = sf30_serial.read();
     //do nothing with this data, but throw it away as old data
   }
-  DEBUG_PRINTLN("Cleared old data");
+  //DEBUG_PRINTLN("Cleared old data");
   delayMicroseconds(500);
 
-  DEBUG_PRINTLN("Beginning SF30 Reading");
+  //DEBUG_PRINTLN("Beginning SF30 Reading");
   delay(1); //let bluetooth catch up
   sf30_serial.available();
   for(int tt = 0; tt < 10; tt++) {
@@ -368,18 +393,18 @@ void TestSF30() {
       while (!sf30_serial.available()); //Don't get off order, wait for second bit.
       Byte_L = sf30_serial.read();
       sfDistance = (float(Byte_L))/256 + Byte_H;
-      DEBUG_PRINT("Distance in meters = ");
+      DEBUG_PRINT(F("Distance in meters = "));
       DEBUG_PRINTLN(sfDistance);
       isSfData += 1; 
     }
     delayMicroseconds(500); //delay 700us before next reading
   }
   if (isSfData == 0) {
-    DEBUG_PRINTLN("No data collected from SF30");
+    DEBUG_PRINTLN(F("No data collected from SF30"));
     delay(1); //let bluetooth catch up
   }
   sf30_serial.print("#N");
-  DEBUG_PRINT("Turned off SF30");
+  //DEBUG_PRINT("Turned off SF30");
 }
 
 /*
@@ -393,11 +418,11 @@ void warmupSF30 () {
   // Start the SF30
   sf30_serial.print("#Y");
   warmupCounter = millis();
-  DEBUG_PRINTLN("Turned on SF30");
+  DEBUG_PRINTLN(F("Start Warmup"));
 
-  DEBUG_PRINTLN("Begin SF30 Reading");
+  //DEBUG_PRINTLN("Begin SF30 Reading");
   sf30_serial.available();
-  while (millis() - warmupCounter < 30000) {
+  while (millis() - warmupCounter < 10000) {
     if (sf30_serial.available() > 0) {
       while (!sf30_serial.available());
       Byte_H = sf30_serial.read();
@@ -408,62 +433,278 @@ void warmupSF30 () {
       //DEBUG_PRINTLN(sfDistance); 
     }
   }
+
   sf30_serial.print("#N");
+  delay(100);
+  //DEBUG_PRINTLN("Turned off SF30");
   
-  delay(1); //let serial catch up
-  DEBUG_PRINT("Warmed up");
+  DEBUG_PRINTLN(F("Warmed up"));
+  delay(100); //let serial catch up
 }
 
-/*
+/*----------------------------------------------------------------
 * scanRoom function - what we've been waiting for...actually scan the room
 */
 void scanRoom() {
-  DEBUG_PRINTLN("Starting room scan");
+  DEBUG_PRINTLN(F("Start room scan"));
+  
+  //Define Variables
+  float range,azimuth,polar;
+  float degPerYawStep = float(360)/myYawSteps;
+  float degPerPitchStep = float(360)/myPitchSteps;
+  unsigned long shotCounter = 0;
+  unsigned int bufferCounter = 0;
+
+  char readingBuffer [9]; //Need 8 + 1 for trailing null from dtostrf
+  char sdBuffer [512];  //Need to send 512 bytes per block to SD card
+
+  //test varialbes to delete later
+  float testrange = 39.999;
+  float testazimuth = 99.9999;
+  float testpolar = 100.99;
+  float testintensity = 256.0;
+
+  //Warmup the SF30
+  warmupSF30();
+
+  //Make sure the motors are not sleeping
+  digitalWrite(slpPin,HIGH);
+
+  //Open the SD card
+  DEBUG_PRINTLN(F("Start SD card"));
+  delay(10);
+
+  if (SD.exists("OL1.CSV")) {
+   //DEBUG_PRINTLN("Can access SD card, but can't open new file");
+   //delay(1); //let bluetooth catch up
+   SD.remove("OL1.CSV");
+  }
+
+  delay(100);
+
+  myFile = SD.open("OL1.CSV", FILE_WRITE);
+  myFile.println("Range,Azimuth,Polar");
+  myFile.close();
+
+  //test the file for debug purposes
+  delay(100);
+  myFile = SD.open("OL1.CSV"); //Open for reading
+  if(myFile) {
+    Serial.println(F("OL1.CSV opened"));
+    while (myFile.available()) {
+      Serial.write(myFile.read());
+    }
+    myFile.close();
+  }
+  else {
+    Serial.println(F("Error opening OL1.SCV"));
+  }
+
+  //Begin scanning procedure
+  //Turn the pitch motor 1 full turn while taking measurements
+  //Write to SD card every 512 Bytes
+  //Turn azimuth motor 1 'step' for each pitch motor turn
+  
+  //Turn on the SF30
+  sf30_serial.print("#Y");
+  delay(10);
+  
+  myFile = SD.open("OL1.CSV", FILE_WRITE);
+  //myFile.println("Range,Azimuth,Polar,Intensity");
+  //myFile.close();
+  DEBUG_PRINTLN(F("Scanning"));
+  delay(100); //let bluetooth catch up
+  
+  //Turn Azimuth
+  //for(int aloop = 0; aloop < myYawSteps; aloop++) {
+  for(int aloop = 0; aloop < 2; aloop++) {
+    // Calculate the azimuth for this loop
+    azimuth = float(aloop)*degPerYawStep;
+
+    //Turn Pitch
+    for(int ploop = 0; ploop < myPitchSteps; ploop++) {
+    //for(int ploop = 0; ploop < 16; ploop++) {
+      // Take a measurement
+      //If there are more than 1 reading (2 bytes) then we have gotten ahead of ourselves
+      while (sf30_serial.available() > 2) { //If there are more than 1 measurement to be read
+        Byte_H = sf30_serial.read();
+        while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+        Byte_L = sf30_serial.read();
+        //do nothing with this data, but throw it away as old data
+      }
+      
+      while (!sf30_serial.available());
+      Byte_H = sf30_serial.read();
+      while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+      Byte_L = sf30_serial.read();
+      range = (float(Byte_L))/256 + Byte_H;
+      polar = float(ploop)*degPerPitchStep;
+
+      //add readings to sdBuffer in 32 byte increments
+      //8 range 1 ',' 8 azimuth 1 ',' 8 polar 1 ',' 3 intensity 1 'lf' 1'cr'
+      dtostrf(range,8,4,readingBuffer);
+      //dtostrf(testrange,8,4,readingBuffer);
+      //DEBUG_PRINT(freeMemory());
+      //DEBUG_PRINT("    ");
+      //DEBUG_PRINT(shotCounter%16);
+      //DEBUG_PRINT("    ");
+      //delay(100);
+      for (int br= 0; br < 8; br++) {
+        sdBuffer[(32*(shotCounter % 16)+br)] = readingBuffer[br];
+      }
+      sdBuffer[(32*(shotCounter%16)+8)] = ',';
+      dtostrf(azimuth,8,4,readingBuffer);
+      //dtostrf(testazimuth,8,4,readingBuffer);
+      for (int ba= 0; ba < 8; ba++) {
+        sdBuffer[(32*(shotCounter % 16)+9+ba)] = readingBuffer[ba];
+      }
+      sdBuffer[(32*(shotCounter%16)+17)] = ',';
+      dtostrf(polar,8,4,readingBuffer);
+      //dtostrf(testpolar,8,4,readingBuffer);
+      for (int bp= 0; bp < 8; bp++) {
+        sdBuffer[(32*(shotCounter % 16)+18+bp)] = readingBuffer[bp];
+      }
+      sdBuffer[(32*(shotCounter%16)+26)] = ',';
+      dtostrf(testintensity,5,0,readingBuffer);
+      for (int bi= 0; bi < 3; bi++) {
+        sdBuffer[(32*(shotCounter % 16)+27+bi)] = readingBuffer[bi+2];
+      }
+      sdBuffer[(32*(shotCounter % 16)+30)] = ' ';
+      sdBuffer[(32*(shotCounter % 16)+31)] = 10;
+      
+
+      //If we are at the end of the buffer shotcounter % 16 = 15
+      //Send the buffer to the sd card
+      if (shotCounter % 16 == 15) {
+        //DEBUG_PRINTLN("Write Loop");
+        //delay(100);
+        myFile.write(sdBuffer,512);
+      }
+
+      //Step the pitch motor forward 1 step
+      //For now, run forward 2 eighth steps to get quarter step...need improvement
+      StepMotorForward(1);
+      StepMotorForward(1);
+
+      //Increment the shot counter every time we take a shot
+      shotCounter += 1;
+    } //end pitch loop
+
+    //DEBUG_PRINTLN("Yaw Loop");
+    //Once every yaw cycle save the file in case of crash
+    myFile.flush();
+
+    // Check for a cancel command
+    while(Serial.available()) {
+    serialData = Serial.readString(); //read incoming data as a string
+      if(serialData.startsWith(F("Cancel"))) {
+        DEBUG_PRINTLN(F("Cancel received."));
+        //Close the file
+        myFile.close();
+        //Put the SF30 back to sleep to save power
+        sf30_serial.print("#N");
+        delay(10);
+        //Turn off the motors
+        digitalWrite(slpPin,LOW);
+        return;
+      }
+    }
+
+    // Run the Yaw motor forward 1 step since the pitch has run a full rotation
+    //For now, run forward 2 eighth steps to get quarter step...need improvement
+    StepMotorForward(2);
+    StepMotorForward(2);
+    
+  }  //end azimuth loop
+
+  //Make sure the motors are sleeping
+  digitalWrite(slpPin,LOW);
+  //myFile.println("Testafterloop");
+  myFile.close();
+  //test the file for debug purposes
+  delay(100);
+  /*
+  myFile = SD.open("OL1.CSV"); //Open for reading
+  if(myFile) {
+    Serial.println(F("OL1.CSV opened"));
+    while (myFile.available()) {
+      Serial.write(myFile.read());
+    }
+    myFile.close();
+  }
+  else {
+    Serial.println(F("Error opening OL1.SCV"));
+  }
+  */
+}
+
+
+/*
+* ArchivescanRoom function - what we've been waiting for...actually scan the room
+*/
+/*
+void ArchivescanRoom() {
+  DEBUG_PRINTLN(F("Start room scan"));
   //delay(1); //let bluetooth catch up
   
   //Make sure the motors are not sleeping
   digitalWrite(slpPin,HIGH);
+  //char tempString[1600][30];  //1600 is quarter pitch steps
+  //char rangeStr[9],azimuthStr[9],polarStr[9];
+  unsigned int tempByte_H, tempByte_L;
+  //int tempRange;
+  unsigned int tempRange[readingsPerWrite];
+  int countCycle = 0;
+  //int countTemp;
   float range;
   float azimuth;
   float polar;
+  //int polarTemp[readingsPerWrite];
   float degPerYawStep = float(360)/myYawSteps;
   float degPerPitchStep = float(360)/myPitchSteps;
   String scanFilename;
 
-  DEBUG_PRINTLN("Start SF30 Warmup");
+  //DEBUG_PRINTLN("Start SF30 Warmup");
   //delay(1); //let bluetooth catch up
   warmupSF30();
 
-  DEBUG_PRINTLN("Start SD card");
-  //delay(1); //let bluetooth catch up
-  // Write the headers in our SD file
-  scanFilename = createNewFileName();
-  if (!SD.begin(4)) {
-    DEBUG_PRINTLN("SD init. Failed.");
-    return; //If we can't use SD card then quit.
+  DEBUG_PRINTLN(F("Start SD card"));
+  delay(10);
+
+  if (SD.exists("OL1.CSV")) {
+   //DEBUG_PRINTLN("Can access SD card, but can't open new file");
+   //delay(1); //let bluetooth catch up
+   SD.remove("OL1.CSV");
   }
 
-  myFile = SD.open(scanFilename, FILE_WRITE);
-  myFile.print("Range,Azimuth,Polar");
+  myFile = SD.open("OL1.CSV", FILE_WRITE);
+  myFile.println("Range,Azimuth,Polar");
   myFile.close();
 
-  DEBUG_PRINTLN("Ready to scan");
-  //delay(1); //let bluetooth catch up
+  DEBUG_PRINTLN(F("Scanning"));
+  delay(10); //let bluetooth catch up
+  //Turn on the SF30
+  sf30_serial.print("#Y");
+  delay(10);
   
   // For each full rotation of the pitch motor run the yaw motor one step
   for(int yy = 0; yy < myYawSteps; yy++) { 
     // Open the SD card to write to
     // open the sd card every yaw loop and close at end to make sure to save data
-    myFile = SD.open(scanFilename, FILE_WRITE);
-        
-    if (!SD.exists("scanFilename")) {
-     DEBUG_PRINTLN("Can access SD card, but can't open new file");
-     delay(1); //let bluetooth catch up
+    
+
+    myFile = SD.open("OL1.CSV", FILE_WRITE);
+    //myFile = SD.open("OL1.CSV", O_CREAT | O_WRITE);
+
+    if (!SD.exists("OL1.CSV")) {
+     //DEBUG_PRINTLN("Can access SD card, but can't open new file");
+     //delay(1); //let bluetooth catch up
      return;
     }
 
     // Calculate the azimuth for this loop
     azimuth = float(yy)*degPerYawStep;
+    //dtostrf(azimuth,8,3,azimuthStr);
     
     // Clear the SF30 memory in case delays have caused a queue
     while (sf30_serial.available() > 0) {
@@ -477,6 +718,7 @@ void scanRoom() {
     // Run the Pitch motor forward 1 rotation
     for(int x = 0; x < myPitchSteps; x++) {
       // Take a measurement
+      //If there are more than 1 reading (2 bytes) then we have gotten ahead of ourselves
       while (sf30_serial.available() > 2) { //If there are more than 1 measurement to be read
         Byte_H = sf30_serial.read();
         while (!sf30_serial.available()); //Don't get off order, wait for second bit.
@@ -484,24 +726,43 @@ void scanRoom() {
         //do nothing with this data, but throw it away as old data
       }
       
-      while (!sf30_serial.available()); //wait for next bit to be available
-      Byte_H = sf30_serial.read();
+      while (!sf30_serial.available());
+      tempByte_H = sf30_serial.read();
       while (!sf30_serial.available()); //Don't get off order, wait for second bit.
-      Byte_L = sf30_serial.read();
-      range = (float(Byte_L))/256 + Byte_H;
-      polar = float(yy)*degPerPitchStep;
+      tempByte_L = sf30_serial.read();
+      tempRange[x % readingsPerWrite] = tempByte_H * 256 + tempByte_L;
+      //range = (float(Byte_L))/256 + Byte_H;
+      //dtostrf(range,8,3,rangeStr);
+
+      //polarTemp[x % readingsPerWrite] = x;
+      //polar = float(x)*degPerPitchStep;
+      //dtostrf(polar,8,2,polarStr);
       
       //Then move the motor forward 1 immediately after measurement
       //For now, run forward 2 eighth steps to get quarter step...need improvement
       StepMotorForward(1);
       StepMotorForward(1);
 
-      // Write to SD card after moving motor to allow settling and measurement time
-      myFile.print(range);
-      myFile.print(",");
-      myFile.print(azimuth);
-      myFile.print(",");
-      myFile.println(polar);
+      if (myFile) {
+      //Only write to the SD card every readingsPerWrite cycles
+      if (x % readingsPerWrite == 0) {
+        for (int n=readingsPerWrite*countCycle; n < readingsPerWrite*(countCycle+1); n++) {
+          range = (float(tempRange[n%readingsPerWrite]))/256;
+          //range = (float(tempRange[x % 64]))/256;
+          polar = float(n)*degPerPitchStep;
+          //polar = (float(polarTemp[x % 64]))*degPerPitchStep;
+          //dtostrf(polar,8,2,polarStr)
+          myFile.print(range);
+          myFile.print(",");
+          myFile.print(azimuth);
+          myFile.print(",");
+          myFile.println(polar);
+          DEBUG_PRINTLN(range);
+        }
+        countCycle += 1;
+      }
+      }
+
     }
   
     // Run the Yaw motor forward 1 step since the pitch has run a full rotation
@@ -509,27 +770,47 @@ void scanRoom() {
       StepMotorForward(2);
       StepMotorForward(2);
 
-    // Close the file to save it
+      countCycle = 0;
+
+    //for (int n=0; n < myPitchSteps; n++) {
+    //  range = (float(tempRange[n]))/256;
+    //  myFile.print(range);
+    //  myFile.print(",");
+    //  myFile.print(azimuth);
+    //  myFile.print(",");
+    //  myFile.println(n);
+    //}
+
+    // save the file in case of crash
       myFile.close();  
 
     // Check for a cancel command
     while(Serial.available()) {
     serialData = Serial.readString(); //read incoming data as a string
-    DEBUG_PRINT("OL recieved: ");
+    //DEBUG_PRINT("OL recieved: ");
     DEBUG_PRINTLN(serialData);
     }
 
     //Decide what to do with the command recieved
-    if(serialData.startsWith("Cancel")) {
-      DEBUG_PRINTLN("Cancel received.");
+    if(serialData.startsWith(F("Cancel"))) {
+      DEBUG_PRINTLN(F("Cancel received."));
+      //Put the motors back to sleep to save power
+      sf30_serial.print("#N");
+      delay(10);
+      //DEBUG_PRINTLN("Turned off SF30");
+      digitalWrite(slpPin,LOW);
       return;
     }
-        
+      
   }
 
+  sf30_serial.print("#N");
+  delay(10);
+  //DEBUG_PRINTLN("Turned off SF30");
   //Put the motors back to sleep to save power
   digitalWrite(slpPin,LOW);
 }
+*/
 
 /*
 * createNewFile function - as name says
@@ -539,20 +820,39 @@ void scanRoom() {
 String createNewFileName() {
   //This is a quick and dirty way to make sure a new file is created.
   //In the future ROM will be used to track file numbers.
-  
+  DEBUG_PRINTLN(F("Create FN"));
+  delay(100);
   String baseFilename = "OL";
   String tempFilename;
+  char tempBuffer[] = "OL1.CSV";
 
-  for (int fileNumber = 1; fileNumber < 9999; fileNumber++) {
-    tempFilename = baseFilename + fileNumber + ".csv";
-    if (!SD.exists(tempFilename)) {  //if the file doesn't exist, return the name
-      DEBUG_PRINT("Found new filename: ");
+  /*
+  if (mySdStatus = 0) {
+    DEBUG_PRINTLN(F("Initialization Failed."));
+  }
+  else {
+    DEBUG_PRINTLN(F("SD was setup"));
+  */
+  
+  for (int fileNumber = 1; fileNumber < 5; fileNumber++) {
+    //DEBUG_PRINTLN("ForLoop");
+    //delay(100);
+    tempFilename = baseFilename + String(fileNumber, DEC) + ".csv";
+    //tempFilename.toCharArray(tempBuffer,tempFilename.length()+1);
+    DEBUG_PRINT(F("Temp file: "));
+    DEBUG_PRINTLN(tempBuffer);
+    delay(100);
+    if (SD.exists(tempBuffer)) {  //if the file doesn't exist, return the name
+      DEBUG_PRINT(F("Found new filename: "));
+      delay(100);
       DEBUG_PRINTLN(tempFilename);
       return tempFilename;
     }
+  //}
   }
-  DEBUG_PRINT("Found files OL1 "); 
-  DEBUG_PRINT("to OL9999. "); 
-  DEBUG_PRINTLN("Clear SD card."); 
+  
+  //return "OL0001.csv";
+  DEBUG_PRINTLN(F("SD full")); 
+  delay(100);
+  return "";
 }
-
