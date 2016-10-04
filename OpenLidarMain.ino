@@ -451,20 +451,26 @@ void scanRoom() {
   DEBUG_PRINTLN(F("Start room scan"));
   
   //Define Variables
-  float range,azimuth,polar;
+  float range,azimuth,elevation;
   float degPerYawStep = float(360)/myYawSteps;
   float degPerPitchStep = float(360)/myPitchSteps;
   unsigned long shotCounter = 0;
   unsigned int bufferCounter = 0;
 
   char readingBuffer [9]; //Need 8 + 1 for trailing null from dtostrf
-  char sdBuffer [512];  //Need to send 512 bytes per block to SD card
+  char rangeBuffer [9];
+  char azimuthBuffer [9];
+  char elevationBuffer [9];
+  char intensityBuffer [4];
+  char lineOutputBuffer [31];
+  //char sdBuffer [512];  //Need to send 512 bytes per block to SD card
+  float measurementBuffer [128];  //each float takes up 4 bytes
 
   //test varialbes to delete later
-  float testrange = 39.999;
-  float testazimuth = 99.9999;
-  float testpolar = 100.99;
-  float testintensity = 256.0;
+  //float testrange = 39.999;
+  //float testazimuth = 99.9999;
+  //float testelevation = 100.99;
+  //float testintensity = 256.0;
 
   //Warmup the SF30
   warmupSF30();
@@ -486,7 +492,7 @@ void scanRoom() {
   delay(100);
 
   myFile = SD.open("OL1.CSV", FILE_WRITE);
-  myFile.println("Range,Azimuth,Polar");
+  myFile.println("Range,Azimuth,Elevation");
   myFile.close();
 
   //test the file for debug purposes
@@ -515,7 +521,7 @@ void scanRoom() {
   delay(10);
   
   myFile = SD.open("OL1.CSV", FILE_WRITE);
-  //myFile.println("Range,Azimuth,Polar,Intensity");
+  //myFile.println("Range,Azimuth,Elevation,Intensity");
   //myFile.close();
   DEBUG_PRINTLN(F("Scanning"));
   delay(100); //let bluetooth catch up
@@ -524,7 +530,7 @@ void scanRoom() {
   //for(int aloop = 0; aloop < myYawSteps; aloop++) {
   for(int aloop = 0; aloop < 2; aloop++) {
     // Calculate the azimuth for this loop
-    azimuth = float(aloop)*degPerYawStep;
+    //azimuth = float(aloop)*degPerYawStep;
 
     //Turn Pitch
     for(int ploop = 0; ploop < myPitchSteps; ploop++) {
@@ -543,15 +549,17 @@ void scanRoom() {
       while (!sf30_serial.available()); //Don't get off order, wait for second bit.
       Byte_L = sf30_serial.read();
       range = (float(Byte_L))/256 + Byte_H;
-      polar = float(ploop)*degPerPitchStep;
+      measurementBuffer[shotcounter % 128] = range;
+      //elevation = float(ploop)*degPerPitchStep;
 
       //add readings to sdBuffer in 32 byte increments
-      //8 range 1 ',' 8 azimuth 1 ',' 8 polar 1 ',' 3 intensity 1 'lf' 1'cr'
+      //8 range 1 ',' 8 azimuth 1 ',' 8 elevation 1 ',' 3 intensity 1 'lf' 1'cr'
       //DEBUG_PRINT(freeMemory());
       //DEBUG_PRINT("    ");
       //DEBUG_PRINT(shotCounter%16);
       //DEBUG_PRINT("    ");
       //delay(100);
+      /*
       dtostrf(range,8,4,readingBuffer);
       //dtostrf(testrange,8,4,readingBuffer);
       for (int br= 0; br < 8; br++) {
@@ -564,8 +572,8 @@ void scanRoom() {
         sdBuffer[(32*(shotCounter % 16)+9+ba)] = readingBuffer[ba];
       }
       sdBuffer[(32*(shotCounter%16)+17)] = ',';
-      dtostrf(polar,8,4,readingBuffer);
-      //dtostrf(testpolar,8,4,readingBuffer);
+      dtostrf(elevation,8,4,readingBuffer);
+      //dtostrf(testelevation,8,4,readingBuffer);
       for (int bp= 0; bp < 8; bp++) {
         sdBuffer[(32*(shotCounter % 16)+18+bp)] = readingBuffer[bp];
       }
@@ -576,14 +584,36 @@ void scanRoom() {
       }
       sdBuffer[(32*(shotCounter % 16)+30)] = ' ';
       sdBuffer[(32*(shotCounter % 16)+31)] = 10;
-      
-      //Buffer is 512 bytes which is 16 rounds of 32 bytes
+      */
+     
+      //readingBuffer is 128 floats which calculates 128 rounds of 32 bytes total
       //If we are at the end of the buffer shotcounter % 16 = 15
       //Send the buffer to the sd card
-      if (shotCounter % 16 == 15) {
+      if (shotCounter % 128 == 127) {
         //DEBUG_PRINTLN("Write Loop");
         //delay(100);
-        myFile.write(sdBuffer,512);
+        //myFile.write(sdBuffer,512);
+        
+        for (int bb = 0; bb < 128; bb++) {
+          elevation = float(shotCounter % myPitchSteps)*degPerPitchStep;
+          azimuth = float(long(shotCounter / myPitchSteps))*degPerYawStep;
+         
+          dtostrf(measurementBuffer[shotcounter % 128],8,4,readingBuffer);
+          for (int br = 0; br < 8; br++) {
+            lineOutputBuffer[br] = readingBuffer[br];
+          }
+          lineOutputBuffer[8] = ',';
+          dtostrf(azimuth,8,4,readingBuffer);
+          for (int ba = 0; ba < 8; ba++) {
+            lineOutputBuffer[ba+9] = readingBuffer[ba];
+          }
+          lineOutputBuffer[17] = ',';
+         
+          lineOutputBuffer[26] = ',';
+         
+          lineOutputBuffer[30] = ' ';
+          lineOutputBuffer[31] = 10;
+        }
       }
 
       //Step the pitch motor forward 1 step
@@ -655,7 +685,7 @@ void ArchivescanRoom() {
   //Make sure the motors are not sleeping
   digitalWrite(slpPin,HIGH);
   //char tempString[1600][30];  //1600 is quarter pitch steps
-  //char rangeStr[9],azimuthStr[9],polarStr[9];
+  //char rangeStr[9],azimuthStr[9],elevationStr[9];
   unsigned int tempByte_H, tempByte_L;
   //int tempRange;
   unsigned int tempRange[readingsPerWrite];
@@ -663,8 +693,8 @@ void ArchivescanRoom() {
   //int countTemp;
   float range;
   float azimuth;
-  float polar;
-  //int polarTemp[readingsPerWrite];
+  float elevation;
+  //int elevationTemp[readingsPerWrite];
   float degPerYawStep = float(360)/myYawSteps;
   float degPerPitchStep = float(360)/myPitchSteps;
   String scanFilename;
@@ -683,7 +713,7 @@ void ArchivescanRoom() {
   }
 
   myFile = SD.open("OL1.CSV", FILE_WRITE);
-  myFile.println("Range,Azimuth,Polar");
+  myFile.println("Range,Azimuth,elevation");
   myFile.close();
 
   DEBUG_PRINTLN(F("Scanning"));
@@ -739,9 +769,9 @@ void ArchivescanRoom() {
       //range = (float(Byte_L))/256 + Byte_H;
       //dtostrf(range,8,3,rangeStr);
 
-      //polarTemp[x % readingsPerWrite] = x;
-      //polar = float(x)*degPerPitchStep;
-      //dtostrf(polar,8,2,polarStr);
+      //elevationTemp[x % readingsPerWrite] = x;
+      //elevation = float(x)*degPerPitchStep;
+      //dtostrf(elevation,8,2,elevationStr);
       
       //Then move the motor forward 1 immediately after measurement
       //For now, run forward 2 eighth steps to get quarter step...need improvement
@@ -754,14 +784,14 @@ void ArchivescanRoom() {
         for (int n=readingsPerWrite*countCycle; n < readingsPerWrite*(countCycle+1); n++) {
           range = (float(tempRange[n%readingsPerWrite]))/256;
           //range = (float(tempRange[x % 64]))/256;
-          polar = float(n)*degPerPitchStep;
-          //polar = (float(polarTemp[x % 64]))*degPerPitchStep;
-          //dtostrf(polar,8,2,polarStr)
+          elevation = float(n)*degPerPitchStep;
+          //elevation = (float(elevationTemp[x % 64]))*degPerPitchStep;
+          //dtostrf(elevation,8,2,elevationStr)
           myFile.print(range);
           myFile.print(",");
           myFile.print(azimuth);
           myFile.print(",");
-          myFile.println(polar);
+          myFile.println(elevation);
           DEBUG_PRINTLN(range);
         }
         countCycle += 1;
