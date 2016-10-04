@@ -4,7 +4,10 @@
 / Order of cells: range, azimuth, polar, intensity
 /----------------------------------------------*/
 
-String filename = "OL1.CSV";
+String inputFilename = "OL1";
+String outputFilename = "OL1xyz";
+
+PrintWriter myOutput; 
 
 float range;
 float azimuth;
@@ -17,17 +20,20 @@ float z;
 
 Table inputTable;
 
-Table outputTable = new Table();
-outputTable.addColumn("x");
-outputTable.addColumn("y");
-outputTable.addColumn("z");
-outputTable.addColumn("i");
+//Table outputTable = new Table();
+//outputTable.addColumn("x");
+//outputTable.addColumn("y");
+//outputTable.addColumn("z");
+//outputTable.addColumn("i");
 
-inputTable = loadTable(filename+".csv");
-println("loaded " + filename + ".csv");
+inputTable = loadTable(inputFilename+".csv","header");  //our file has a header
+println("loaded " + inputFilename + ".csv");
 println(inputTable.getRowCount() + " total rows in table");
 
-for (TableRow row + 1 : inputTable.rows()) { //Don't need to get the headers
+myOutput = createWriter(outputFilename+".CSV");
+myOutput.println("x,y,z,i");
+
+for (TableRow row : inputTable.rows()) { 
   range = row.getFloat(0);
   azimuth = row.getFloat(1);
   elevation = row.getFloat(2);
@@ -37,11 +43,16 @@ for (TableRow row + 1 : inputTable.rows()) { //Don't need to get the headers
   y = range*sin(elevation)*sin(azimuth);
   z = range*cos(elevation);
   
-  TableRow newRow = outputTable.addRow();
-  newRow.setFloat("x", x);
-  newRow.setFloat("y", y);
-  newRow.setFloat("z", z);
-  newRow.setFloat("i", i);
+  //Save memory and write append to output file
+  myOutput.println(x + "," + y + "," + z + "," + i);
+  
+  //TableRow newRow = outputTable.addRow();
+  //newRow.setFloat("x", x);
+  //newRow.setFloat("y", y);
+  //newRow.setFloat("z", z);
+  //newRow.setFloat("i", i);
 }
 
-saveTable(outputTable, "output/OL1xyz.CSV");
+myOutput.flush();
+myOutput.close();
+//saveTable(outputTable, "output/OL1xyz.CSV");
