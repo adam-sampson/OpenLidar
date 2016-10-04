@@ -1,1 +1,52 @@
+/*----------------------------------------------
+/ Spherical coordinates to XYZ
+/ Assuming Ascii inputs.
+/ Order of cells: range, azimuth, polar, intensity
+/----------------------------------------------*/
 
+import java.io.FileReader;
+import java.io.FileNotFoundException;
+
+ArrayList<Float> rangeData=new ArrayList<Float>();
+ArrayList<Float> azimuthData=new ArrayList<Float>();
+ArrayList<Float> polarData=new ArrayList<Float>();
+ArrayList<Float> intensityData=new ArrayList<Float>();
+
+void setup(){
+  readData("C:/SensorData/mySensorData.txt");
+}
+
+void readData(String myFileName){
+  
+  File file=new File(myFileName);
+  BufferedReader br=null;
+  
+  try{
+    br=new BufferedReader(new FileReader(file));
+    String text=null;
+    
+    while((text=br.readLine())!=null){
+      String [] subtext = splitTokens(text,",");
+      rangeData.add(float(subtext[0]));
+      azimuthData.add(float(subtext[1]));
+      polarData.add(float(subtext[2]));
+      intensityData.add(float(subtext[3]));
+    }
+  }catch(FileNotFoundException e){
+    e.printStackTrace();
+  }catch(IOException e){
+    e.printStackTrace();
+  }finally{
+    try {
+      if (br != null){
+        br.close();
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  }
+  for (int i=0; i<rangeData.size()-1; i++){
+    print(columnOne.get(i) + ".....");
+    println(sensorData.get(i));
+  }
+}
