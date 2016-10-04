@@ -11,6 +11,9 @@ ArrayList<Float> rangeData=new ArrayList<Float>();
 ArrayList<Float> azimuthData=new ArrayList<Float>();
 ArrayList<Float> polarData=new ArrayList<Float>();
 ArrayList<Float> intensityData=new ArrayList<Float>();
+ArrayList<Float> x = new ArrayList<Float>();
+ArrayList<Float> y = new ArrayList<Float>();
+ArrayList<Float> z = new ArrayList<Float>();
 
 void setup(){
   readData("C:/SensorData/OL1.CSV");
@@ -52,5 +55,13 @@ void readData(String myFileName){
     print(azimuthData.get(i) + " - ");
     print(polarData.get(i) + " - ");
     println(intensityData.get(i));
+  }
+}
+
+void convertToXYZascii() {
+  for (int i=0; i<rangeData.size()-1; i++) {
+    x.add(rangeData.get(i)*sin(polarData.get(i))*cos(azimuthData.get(i)));
+    y.add(rangeData.get(i)*sin(polarData.get(i))*sin(azimuthData.get(i)));
+    z.add(rangeData.get(i)*cos(polarData.get(i)));
   }
 }
