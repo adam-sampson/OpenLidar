@@ -39,14 +39,18 @@ for (TableRow row : inputTable.rows()) {
   elevation = row.getFloat(2);
   intensity = row.getFloat(3);
   
-  x = range*sin(elevation)*cos(azimuth);
-  y = range*sin(elevation)*sin(azimuth);
-  z = range*cos(elevation);
+  //Only do conversion if range is within capability < 50m
+  //If measurement is below 0.15 we get strange values
+  if(range < 50.0) {
+    x = range*sin(elevation)*cos(azimuth);
+    y = range*sin(elevation)*sin(azimuth);
+    z = range*cos(elevation);
   
-  //Save memory and write append to output file
-  myOutput.println(x + "," + y + "," + z + "," + i);
-  //output for debug
-  //println(x + "," + y + "," + z + "," + i);
+    //Save memory and write append to output file
+    myOutput.println(x + "," + y + "," + z + "," + i);
+    //output for debug
+    //println(x + "," + y + "," + z + "," + i);
+  }
   
   //TableRow newRow = outputTable.addRow();
   //newRow.setFloat("x", x);
