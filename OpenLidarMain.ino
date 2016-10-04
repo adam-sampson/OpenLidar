@@ -545,6 +545,14 @@ void scanRoom() {
       while (!sf30_serial.available()); //Don't get off order, wait for second bit.
       Byte_L = sf30_serial.read();
       range = (float(Byte_L))/256 + Byte_H;
+      //if the range is over max distance of 50m try again one time
+      if(range > 50.0) {
+        while (!sf30_serial.available()); //Wait until data is available
+        Byte_H = sf30_serial.read();
+        while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+        Byte_L = sf30_serial.read();
+        range = (float(Byte_L))/256 + Byte_H;
+      }
       measurementBuffer[shotcounter % 128] = range;
       //elevation = float(ploop)*degPerPitchStep;
 
