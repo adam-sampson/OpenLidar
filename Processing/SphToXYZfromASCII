@@ -1,4 +1,8 @@
-//Yada yada
+/*----------------------------------------------
+/ Spherical coordinates to XYZ
+/ Assuming Ascii inputs.
+/ Order of cells: range, azimuth, polar, intensity
+/----------------------------------------------*/
 
 String filename = "OL1.CSV";
 
