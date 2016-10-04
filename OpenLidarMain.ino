@@ -718,14 +718,16 @@ String createNewFileName(char *fileName) {
     strcat(fileName,"v");
     //tempFilename.toCharArray(tempBuffer,tempFilename.length()+1);
     DEBUG_PRINT(F("Temp file: "));
-    DEBUG_PRINTLN(tempBuffer);
+    DEBUG_PRINTLN(fileName);
     delay(100);
-    if (SD.exists(tempBuffer)) {  //if the file doesn't exist, return the name
+    if (!SD.exists(fileName)) {  //if the file doesn't exist, return the name
       DEBUG_PRINT(F("Found new filename: "));
       delay(100);
       DEBUG_PRINTLN(tempFilename);
       return tempFilename;
     }
+    //else empty fileName before trying again
+    fileName[0] = '\0';
   //}
   }
   
