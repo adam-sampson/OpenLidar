@@ -682,14 +682,18 @@ void scanRoom() {
 * Check to see if file is taken and increment until unique name is found
 * Return file name for use.
 */
-String createNewFileName() {
+String createNewFileName(char *fileName) {
   //This is a quick and dirty way to make sure a new file is created.
   //In the future ROM will be used to track file numbers.
+  //Empty fileName
+  fileName[0] = '\0'
+   
+  //Start calculating 
   DEBUG_PRINTLN(F("Create FN"));
   delay(100);
-  String baseFilename = "OL";
-  String tempFilename;
-  char tempBuffer[] = "OL1.CSV";
+  char baseFilename [2] = "OL";
+  //String tempFilename;
+  //char tempBuffer[] = "OL1.CSV";
 
   /*
   if (mySdStatus = 0) {
@@ -702,7 +706,16 @@ String createNewFileName() {
   for (int fileNumber = 1; fileNumber < 5; fileNumber++) {
     //DEBUG_PRINTLN("ForLoop");
     //delay(100);
-    tempFilename = baseFilename + String(fileNumber, DEC) + ".csv";
+    strcat(fileName,baseFilename);
+    //need to add each digit of fileNumber (4 digits)
+    strcat(fileName,char(fileNumber/(1000)));
+    strcat(fileName,char((fileNumber%(1000))/100));
+    strcat(fileName,char(((fileNumber%(1000))%100)/10));
+    strcat(fileName,char(((fileNumber%(1000))%100)%10));
+    strcat(fileName,".");
+    strcat(fileName,"c");
+    strcat(fileName,"s");
+    strcat(fileName,"v");
     //tempFilename.toCharArray(tempBuffer,tempFilename.length()+1);
     DEBUG_PRINT(F("Temp file: "));
     DEBUG_PRINTLN(tempBuffer);
