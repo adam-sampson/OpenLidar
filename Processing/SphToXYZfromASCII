@@ -45,6 +45,8 @@ for (TableRow row : inputTable.rows()) {
   
   //Save memory and write append to output file
   myOutput.println(x + "," + y + "," + z + "," + i);
+  //output for debug
+  //println(x + "," + y + "," + z + "," + i);
   
   //TableRow newRow = outputTable.addRow();
   //newRow.setFloat("x", x);
