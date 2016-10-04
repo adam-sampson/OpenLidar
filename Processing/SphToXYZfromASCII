@@ -1,0 +1,43 @@
+//Yada yada
+
+String filename = "13-42-14_rawEEGData";
+
+float range;
+float azimuth;
+float elevation;
+float intensity;
+
+float x;
+float y;
+float z;
+
+Table inputTable;
+
+Table outputTable = new Table();
+outputTable.addColumn("x");
+outputTable.addColumn("y");
+outputTable.addColumn("z");
+outputTable.addColumn("i");
+
+inputTable = loadTable(filename+".csv");
+println("loaded " + filename + ".csv");
+println(inputTable.getRowCount() + " total rows in table");
+
+for (TableRow row : inputTable.rows()) {
+  range = row.getFloat(0);
+  azimuth = row.getFloat(1);
+  elevation = row.getFloat(2);
+  intensity = row.getFloat(3);
+  
+  x = range*sin(elevation)*cos(azimuth);
+  y = range*sin(elevation)*sin(azimuth);
+  z = range*cos(elevation);
+  
+  TableRow newRow = outputTable.addRow();
+  newRow.setFloat("x", x);
+  newRow.setFloat("y", y);
+  newRow.setFloat("z", z);
+  newRow.setFloat("i", i);
+}
+
+saveTable(outputTable, "output/OL1xyz.CSV");
