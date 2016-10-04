@@ -1,6 +1,6 @@
 //Yada yada
 
-String filename = "13-42-14_rawEEGData";
+String filename = "OL1.CSV";
 
 float range;
 float azimuth;
