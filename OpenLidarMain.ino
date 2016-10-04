@@ -105,8 +105,8 @@ const unsigned long PROGMEM yawMotDelay = 2400;
 unsigned long  pitchMotMicroCounter; 
 unsigned long yawMotMicroCounter; 
 
-int myYawSteps = 400*8;  // This is a 400 step motor with Eighth Steps
-int myPitchSteps = 400*8;  // This is a 400 step motor with Eight Steps
+int myYawSteps = 400*4;  // This is a 400 step motor with two Eighth Steps = quarter step
+int myPitchSteps = 400*4;  // This is a 400 step motor with two Eighth Steps = quarter step
 
 // define SD card variables
 File myFile;
