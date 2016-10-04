@@ -27,7 +27,7 @@ inputTable = loadTable(filename+".csv");
 println("loaded " + filename + ".csv");
 println(inputTable.getRowCount() + " total rows in table");
 
-for (TableRow row : inputTable.rows()) {
+for (TableRow row + 1 : inputTable.rows()) { //Don't need to get the headers
   range = row.getFloat(0);
   azimuth = row.getFloat(1);
   elevation = row.getFloat(2);
