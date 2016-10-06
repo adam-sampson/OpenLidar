@@ -12,9 +12,10 @@ void scanRoom() {
   unsigned long degPerYawStepX1K = (360*1000)/myYawSteps;
   unsigned long degPerPitchStepX1K = (360*1000)/myPitchSteps;
   unsigned long shotCounter = 0;
+  unsigned long azimuthCounter = 0;
+  unsigned long elevationCounter = 0; 
   unsigned int bufferCounter = 0;
   unsigned long calculatePosition = 0;
-  float tempHolder;
 
   char readingBuffer [9]; //Need 8 + 1 for trailing null from dtostrf
   char lineOutputBuffer [31];
@@ -105,20 +106,20 @@ void scanRoom() {
       Byte_H = sf30_serial.read();
       while (!sf30_serial.available()); //Don't get off order, wait for second bit.
       Byte_L = sf30_serial.read();
-      //range = (float(Byte_L))/256 + Byte_H;
-      lrangeX1K = (Byte_L*1000)/256 + (Byte_H*1000);
+      range = (float(Byte_L))/256 + Byte_H;
+      //lrangeX1K = (Byte_L*1000)/256 + (Byte_H*1000);
       //if the range is over max distance of 50m try again one time
-      //if(range > 50.0) {
-      if(lrangeX1K > 50000) {
+      if(range > 50.0) {
+      //if(lrangeX1K > 50000) {
         while (!sf30_serial.available()); //Wait until data is available
         Byte_H = sf30_serial.read();
         while (!sf30_serial.available()); //Don't get off order, wait for second bit.
         Byte_L = sf30_serial.read();
-        //range = (float(Byte_L))/256 + Byte_H;
-        lrangeX1K = (Byte_L*1000)/256 + (Byte_H*1000);
+        range = (float(Byte_L))/256 + Byte_H;
+        //lrangeX1K = (Byte_L*1000)/256 + (Byte_H*1000);
       }
-      //measurementBuffer[shotCounter % 128] = range;
-      lmeasurementBuffer[shotCounter % 128] = lrangeX1K;
+      measurementBuffer[shotCounter % 128] = range;
+      //lmeasurementBuffer[shotCounter % 128] = lrangeX1K;
       //elevation = float(ploop)*degPerPitchStep;
 
       //add readings to sdBuffer in 32 byte increments
@@ -145,38 +146,38 @@ void scanRoom() {
           DEBUG_PRINT(calculatePosition);
           delay(10);
           if ((calculatePosition) < myPitchSteps) { //if calculatePosition < 1600
-            //elevation = float(calculatePosition)*degPerPitchStep;
-            lelevationX1K = calculatePosition*degPerPitchStepX1K;
-            elevation = float(lelevationX1K) / 1000;
-            //azimuth = float(0); //this is the first pitch turn...so azimuth is still 0
-            lazimuthX1K = 0;
-            azimuth = float(lazimuthX1K) / 1000;
+            elevation = float(elevationCounter)*degPerPitchStep;
+            //lelevationX1K = calculatePosition*degPerPitchStepX1K;
+            //elevation = float(lelevationX1K) / 1000;
+            azimuth = float(0); //this is the first pitch turn...so azimuth is still 0
+            //lazimuthX1K = 0;
+            //azimuth = float(lazimuthX1K) / 1000;
           }
           else {
-            calculatePosition = calculatePosition % myPitchSteps;
-            DEBUG_PRINT(" ");
-            DEBUG_PRINT(calculatePosition);
-            delay(10);
-            //elevation = float((calculatePosition))*degPerPitchStep;
-            lelevationX1K = calculatePosition*degPerPitchStepX1K;
-            elevation = float(lelevationX1K) / 1000;
-            calculatePosition = shotCounter - 127 + bb;
-            calculatePosition = calculatePosition/myPitchSteps;
-            DEBUG_PRINT(" ");
-            DEBUG_PRINT(calculatePosition);
-            delay(10);
-            //azimuth = float((calculatePosition))*degPerYawStep;
-            lazimuthX1K = calculatePosition*degPerYawStepX1K;
-            azimuth = float(lazimuthX1K) / 1000;
+            //calculatePosition = calculatePosition % myPitchSteps;
+            //DEBUG_PRINT(" ");
+            //DEBUG_PRINT(calculatePosition);
+            //delay(10);
+            elevation = float(elevationCounter)*degPerPitchStep;
+            //lelevationX1K = calculatePosition*degPerPitchStepX1K;
+            //elevation = float(lelevationX1K) / 1000;
+            //calculatePosition = shotCounter - 127 + bb;
+            //calculatePosition = calculatePosition/myPitchSteps;
+            //DEBUG_PRINT(" ");
+            //DEBUG_PRINT(calculatePosition);
+            //delay(10);
+            azimuth = float(azimuthCounter)*degPerYawStep;
+            //lazimuthX1K = calculatePosition*degPerYawStepX1K;
+            //azimuth = float(lazimuthX1K) / 1000;
           }
 
           calculatePosition = (shotCounter % 127) + bb;
           DEBUG_PRINT(" ");
           DEBUG_PRINT(calculatePosition);
           delay(10);
-          range = float(lmeasurementBuffer[calculatePosition])/1000;
-          //dtostrf(measurementBuffer[calculatePosition],8,4,readingBuffer);
-          dtostrf(range,8,4,readingBuffer);
+          //range = float(lmeasurementBuffer[calculatePosition])/1000;
+          dtostrf(measurementBuffer[calculatePosition],8,4,readingBuffer);
+          //dtostrf(range,8,4,readingBuffer);
           //dtostrf(float(2),8,4,readingBuffer);
           for (int br = 0; br < 8; br++) {
             lineOutputBuffer[br] = readingBuffer[br];
@@ -210,6 +211,12 @@ void scanRoom() {
 
       //Increment the shot counter every time we take a shot
       shotCounter += 1;
+      if (elevationCounter < myPitchSteps) {
+        elevationCounter += 1; 
+      }
+      else {
+        elevationCounter = 0; 
+      }
     } //end pitch loop
 
     //DEBUG_PRINTLN("Yaw Loop");
@@ -236,7 +243,12 @@ void scanRoom() {
     //For now, run forward 2 eighth steps to get quarter step...need improvement
     StepMotorForward(2);
     StepMotorForward(2);
-    
+    if (azimuthCounter < myYawSteps) {
+      azimuthCounter += 1; 
+    }
+    else {
+      azimuthCounter = 0; 
+    }
   }  //end azimuth loop
 
   //Make sure the motors are sleeping
