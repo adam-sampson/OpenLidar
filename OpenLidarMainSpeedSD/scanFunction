@@ -1,0 +1,274 @@
+/*----------------------------------------------------------------
+* scanRoom function - what we've been waiting for...actually scan the room
+*/
+void scanRoom() {
+  DEBUG_PRINTLN(F("Start room scan"));
+  
+  //Define Variables
+  float range,azimuth,elevation;
+  float degPerYawStep = float(360)/myYawSteps;
+  float degPerPitchStep = float(360)/myPitchSteps;
+  unsigned long lrange,lazimuth,lelevation;
+  unsigned long degPerYawStepX1K = (360*1000)/myYawSteps;
+  unsigned long degPerPitchStepX1K = (360*1000)/myPitchSteps;
+  unsigned long shotCounter = 0;
+  unsigned int bufferCounter = 0;
+  unsigned long calculatePosition = 0;
+
+  char readingBuffer [9]; //Need 8 + 1 for trailing null from dtostrf
+  char lineOutputBuffer [31];
+  //char sdBuffer [512];  //Need to send 512 bytes per block to SD card
+  float measurementBuffer [128];  //each float takes up 4 bytes
+  unsigned long lmeasurementBuffer [128];
+
+  //test varialbes to delete later
+  //float testrange = 39.999;
+  //float testazimuth = 99.9999;
+  //float testelevation = 100.99;
+  float testintensity = 256.0;
+
+  //Warmup the SF30
+  warmupSF30();
+
+  //Make sure the motors are not sleeping
+  digitalWrite(slpPin,HIGH);
+
+  //Open the SD card
+  DEBUG_PRINTLN(F("Start SD card"));
+  delay(10);
+
+  //For now, overwrite old file...need file increment function
+  if (SD.exists("OL1.CSV")) {
+   //DEBUG_PRINTLN("Can access SD card, but can't open new file");
+   //delay(1); //let bluetooth catch up
+   SD.remove("OL1.CSV");
+  }
+
+  delay(100);
+
+  myFile = SD.open("OL1.CSV", FILE_WRITE);
+  myFile.println("Range,Azimuth,Elevation");
+  myFile.close();
+
+  //test the file for debug purposes
+  /*
+  delay(100);
+  myFile = SD.open("OL1.CSV"); //Open for reading
+  if(myFile) {
+    Serial.println(F("OL1.CSV opened"));
+    while (myFile.available()) {
+      Serial.write(myFile.read());
+    }
+    myFile.close();
+  }
+  else {
+    Serial.println(F("Error opening OL1.SCV"));
+  }
+  */
+
+  //Begin scanning procedure
+  //Turn the pitch motor 1 full turn while taking measurements
+  //Write to SD card every 512 Bytes
+  //Turn azimuth motor 1 'step' for each pitch motor turn
+  
+  //Turn on the SF30
+  sf30_serial.print("#Y");
+  delay(10);
+  
+  myFile = SD.open("OL1.CSV", FILE_WRITE);
+  //myFile.println("Range,Azimuth,Elevation,Intensity");
+  //myFile.close();
+  DEBUG_PRINTLN(F("Scanning"));
+  delay(100); //let bluetooth catch up
+  
+  //Turn Azimuth
+  //for(int aloop = 0; aloop < myYawSteps; aloop++) {
+  for(int aloop = 0; aloop < 2; aloop++) {
+    // Calculate the azimuth for this loop
+    //azimuth = float(aloop)*degPerYawStep;
+
+    //Turn Pitch
+    for(int ploop = 0; ploop < myPitchSteps; ploop++) {
+    //for(int ploop = 0; ploop < 16; ploop++) {
+      // Take a measurement
+      //If there are more than 1 reading (2 bytes) then we have gotten ahead of ourselves
+      while (sf30_serial.available() > 2) { //If there are more than 1 measurement to be read
+        Byte_H = sf30_serial.read();
+        while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+        Byte_L = sf30_serial.read();
+        //do nothing with this data, but throw it away as old data
+      }
+      
+      while (!sf30_serial.available()); //Wait until data is available
+      Byte_H = sf30_serial.read();
+      while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+      Byte_L = sf30_serial.read();
+      range = (float(Byte_L))/256 + Byte_H;
+      //if the range is over max distance of 50m try again one time
+      if(range > 50.0) {
+        while (!sf30_serial.available()); //Wait until data is available
+        Byte_H = sf30_serial.read();
+        while (!sf30_serial.available()); //Don't get off order, wait for second bit.
+        Byte_L = sf30_serial.read();
+        range = (float(Byte_L))/256 + Byte_H;
+      }
+      measurementBuffer[shotCounter % 128] = range;
+      //elevation = float(ploop)*degPerPitchStep;
+
+      //add readings to sdBuffer in 32 byte increments
+      //8 range 1 ',' 8 azimuth 1 ',' 8 elevation 1 ',' 3 intensity 1 'lf' 1'cr'
+      //DEBUG_PRINT(freeMemory());
+      //DEBUG_PRINT("    ");
+      //DEBUG_PRINT(shotCounter%16);
+      //DEBUG_PRINT("    ");
+      //delay(100);
+      /*
+      dtostrf(range,8,4,readingBuffer);
+      //dtostrf(testrange,8,4,readingBuffer);
+      for (int br= 0; br < 8; br++) {
+        sdBuffer[(32*(shotCounter % 16)+br)] = readingBuffer[br];
+      }
+      sdBuffer[(32*(shotCounter%16)+8)] = ',';
+      dtostrf(azimuth,8,4,readingBuffer);
+      //dtostrf(testazimuth,8,4,readingBuffer);
+      for (int ba= 0; ba < 8; ba++) {
+        sdBuffer[(32*(shotCounter % 16)+9+ba)] = readingBuffer[ba];
+      }
+      sdBuffer[(32*(shotCounter%16)+17)] = ',';
+      dtostrf(elevation,8,4,readingBuffer);
+      //dtostrf(testelevation,8,4,readingBuffer);
+      for (int bp= 0; bp < 8; bp++) {
+        sdBuffer[(32*(shotCounter % 16)+18+bp)] = readingBuffer[bp];
+      }
+      sdBuffer[(32*(shotCounter%16)+26)] = ',';
+      dtostrf(testintensity,5,0,readingBuffer);
+      for (int bi= 0; bi < 3; bi++) {
+        sdBuffer[(32*(shotCounter % 16)+27+bi)] = readingBuffer[bi+2];
+      }
+      sdBuffer[(32*(shotCounter % 16)+30)] = ' ';
+      sdBuffer[(32*(shotCounter % 16)+31)] = 10;
+      */
+     
+      //The (number of cycles)(bytes output per cycle) needs to have a factor of 512
+      //readingBuffer is 128 floats which calculates 128 rounds of 32 bytes total
+      //If we are at the end of the buffer shotcounter % 128 = 127
+      //Send the buffer to the sd card
+      if (shotCounter % 128 == 127) {
+        //DEBUG_PRINTLN("Write Loop");
+        //delay(100);
+        
+        for (int bb = 0; bb < 128; bb++) {
+          //DEBUG_PRINT(" ");
+          //DEBUG_PRINTLN(freeMemory());
+          calculatePosition = shotCounter - 127 + bb;
+          DEBUG_PRINT(" ");
+          DEBUG_PRINT(calculatePosition);
+          delay(10);
+          if ((calculatePosition) < myPitchSteps) { //if calculatePosition < 1600
+            elevation = float(calculatePosition)*degPerPitchStep;
+            azimuth = float(0); //this is the first pitch turn...so azimuth is still 0
+        //    elevation = float(0);
+          }
+          else {
+            calculatePosition = calculatePosition % myPitchSteps;
+            DEBUG_PRINT(" ");
+            DEBUG_PRINT(calculatePosition);
+            delay(10);
+            elevation = float((calculatePosition))*degPerPitchStep;
+            calculatePosition = shotCounter - 127 + bb;
+            calculatePosition = calculatePosition/myPitchSteps;
+            DEBUG_PRINT(" ");
+            DEBUG_PRINT(calculatePosition);
+            delay(10);
+            azimuth = float((calculatePosition))*degPerYawStep;
+          }
+
+          calculatePosition = (shotCounter % 127) + bb;
+          DEBUG_PRINT(" ");
+          DEBUG_PRINT(calculatePosition);
+          delay(10);
+          dtostrf(measurementBuffer[calculatePosition],8,4,readingBuffer);
+          //dtostrf(float(2),8,4,readingBuffer);
+          for (int br = 0; br < 8; br++) {
+            lineOutputBuffer[br] = readingBuffer[br];
+          }
+          lineOutputBuffer[8] = ',';
+          dtostrf(azimuth,8,4,readingBuffer);
+          for (int ba = 0; ba < 8; ba++) {
+            lineOutputBuffer[ba+9] = readingBuffer[ba];
+          }
+          lineOutputBuffer[17] = ',';
+          dtostrf(elevation,8,4,readingBuffer);
+          for (int be = 0; be < 8; be++) {
+            lineOutputBuffer[be+18] = readingBuffer[be];
+          }
+          lineOutputBuffer[26] = ',';
+          dtostrf(testintensity,5,0,readingBuffer);
+          for (int ba = 0; ba < 3; ba++) {
+            lineOutputBuffer[ba+27] = readingBuffer[ba+2];
+          }
+          lineOutputBuffer[30] = ' ';
+          lineOutputBuffer[31] = 10;
+          //write one line at a time to save memory
+          myFile.write(lineOutputBuffer,32);
+        }
+      }
+
+      //Step the pitch motor forward 1 step
+      //For now, run forward 2 eighth steps to get quarter step...need improvement
+      StepMotorForward(1);
+      StepMotorForward(1);
+
+      //Increment the shot counter every time we take a shot
+      shotCounter += 1;
+    } //end pitch loop
+
+    //DEBUG_PRINTLN("Yaw Loop");
+    //Once every yaw cycle save the file in case of crash
+    myFile.flush();
+
+    // Check for a Cancel command
+    while(Serial.available()) {
+    serialData = Serial.readString(); //read incoming data as a string
+      if(serialData.startsWith(F("Cancel"))) {
+        DEBUG_PRINTLN(F("Cancel received."));
+        //Close the file
+        myFile.close();
+        //Put the SF30 back to sleep to save power
+        sf30_serial.print("#N");
+        delay(10);
+        //Turn off the motors
+        digitalWrite(slpPin,LOW);
+        return;
+      }
+    }
+
+    // Run the Yaw motor forward 1 step since the pitch has run a full rotation
+    //For now, run forward 2 eighth steps to get quarter step...need improvement
+    StepMotorForward(2);
+    StepMotorForward(2);
+    
+  }  //end azimuth loop
+
+  //Make sure the motors are sleeping
+  digitalWrite(slpPin,LOW);
+  //myFile.println("Testafterloop");
+  myFile.close();
+  //test the file for debug purposes
+  delay(100);
+  DEBUG_PRINTLN(F("Write Complete"));
+
+  /*
+  myFile = SD.open("OL1.CSV"); //Open for reading
+  if(myFile) {
+    Serial.println(F("OL1.CSV opened"));
+    while (myFile.available()) {
+      Serial.write(myFile.read());
+    }
+    myFile.close();
+  }
+  else {
+    Serial.println(F("Error opening OL1.SCV"));
+  }
+  */
+}
