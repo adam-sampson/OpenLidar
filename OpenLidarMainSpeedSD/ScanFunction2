@@ -117,17 +117,31 @@ void scanRoom() {
         readingBuffer[0] = 0; //start with a null string
         for (int writeLoop = 0; writeLoop <= shotcounter; writeLoop++) {
           range = float(rangeBuffer[writeLoop]) / 1000; 
-          //if all the readings were in the same pitch loop then
-          if (eloop > shotCounter) {
+          intensity = testintensity;
+          //if reading we are processing was in the current elevation loop
+          if (writeLoop + eloop >= shotCounter) {
             azimuth = float(aloop)*degPerYawStep;
             elevation = float(writeLoop + eloop - shotCounter)*degPerPitchStep;
           }
+          //otherwise reading was in the last pitch loop which is one yaw earlier
           else {
-            
+            azimuth = float(aloop - 1)*degPerYawStep; 
+            elevation = float(myPitchSteps + writeLoop + eloop - shotCounter)*degPerPitchStep;
           }
-          intensity = testintensity;
+          //Convert floats to strings and put in lineOutputBuffer (erasing null 0 bit at same time)
           dtostrf(range,8,4,readingBuffer);
-          strcat(lineOutputBuffer,readingBuffer"
+          for(int ii=0; ii < 8; ii++) { lineOutputBuffer[ii] = readingBuffer[ii]; }
+          lineOutputBuffer[8] = ',';
+          dtostrf(azimuth,8,4,readingBuffer);
+          for(int jj=0; jj < 8; jj++) { lineOutputBuffer[jj+9] = readingBuffer[jj]; }
+          lineOutputBuffer[17] = ','; 
+          dtostrf(elevation,8,4,readingBuffer);
+          for(int kk=0; kk < 8; kk++) { lineOutputBuffer[kk+18] = readingBuffer[kk]; }
+          lineOutputBuffer[25] = ',';
+          dtostrf(intensity,4,0,readingBuffer);
+          for(int ll=0; ll < 4; ll++) { lineOutputBuffer[ll+26] = readingBuffer[ll+2]; }
+          //Send one line of 32Bytes to SD card
+          myFile.write(lineOutputBuffer,32);
         }
       }
 
