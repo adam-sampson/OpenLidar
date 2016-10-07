@@ -113,11 +113,22 @@ void scanRoom() {
         //DEBUG_PRINTLN("Write Loop");
         //delay(100);
         //myFile.write(sdBuffer,512);
-        range = float(rangeInt) / 1000; 
-        azimuth = float(aloop)*degPerYawStep;
-        elevation = float(eloop)*degPerPitchStep;
-        intensity = testintensity;
-        dtostrf(,8,4,readingBuffer);
+        lineOutputBuffer[0] = 0; //start with a null string
+        readingBuffer[0] = 0; //start with a null string
+        for (int writeLoop = 0; writeLoop <= shotcounter; writeLoop++) {
+          range = float(rangeBuffer[writeLoop]) / 1000; 
+          //if all the readings were in the same pitch loop then
+          if (eloop > shotCounter) {
+            azimuth = float(aloop)*degPerYawStep;
+            elevation = float(writeLoop + eloop - shotCounter)*degPerPitchStep;
+          }
+          else {
+            
+          }
+          intensity = testintensity;
+          dtostrf(range,8,4,readingBuffer);
+          strcat(lineOutputBuffer,readingBuffer"
+        }
       }
 
       //Step the pitch motor forward 1 step
