@@ -87,6 +87,7 @@ void scanRoom() {
     //for(int ploop = 0; ploop < 16; ploop++) {
       // Take a measurement
       //If there are more than 1 reading (2 bytes) then we have gotten ahead of ourselves
+      //We don't want to save extra shots or old shots, so read them without saving
       while (sf30_serial.available() > 2) { //If there are more than 1 measurement to be read
         Byte_H = sf30_serial.read();
         while (!sf30_serial.available()); //Don't get off order, wait for second bit.
