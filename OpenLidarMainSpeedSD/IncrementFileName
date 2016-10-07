@@ -1,0 +1,16 @@
+long fileNum = 10000; //max 99999
+String sFileName;
+char cFileName[13];
+
+void incrementFileNum() {
+  String s = "OL" + String(++fileNum) + ".csv";
+  s.toCharArray(cFileName,13);
+}
+
+void setUniqueFileName () {
+  //set the filename! Without running this it would be blank
+  incrementFileNum();
+  //check for unique, and increment if not
+  while (SD.exists(cFileName)) incrementFileNum();
+  //DEBUG_PRINTLN(F("New FileName: ") + String(cFileName));  
+}
