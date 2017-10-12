@@ -32,3 +32,4 @@ Future items needed
 - Statistically evaluate SF30 data
 - Create optional per/pitch smoothing algorithm for SF30 data (built in smoothing doesn't start over when switching to a new direction)
 - Identify proper warm-up time for sensor
+- Rewrite code to leverage the Teensy 3.5 board capabilities.
