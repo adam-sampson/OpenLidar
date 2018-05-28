@@ -1,0 +1,64 @@
+/*----------------------------------------------
+/ Spherical coordinates to XYZ
+/ Assuming Ascii inputs.
+/ Order of cells: range, azimuth, polar, intensity
+/----------------------------------------------*/
+
+String inputFilename = "OL1";
+String outputFilename = "OL1xyz";
+
+PrintWriter myOutput; 
+
+float range;
+float azimuth;
+float elevation;
+float intensity;
+
+float x;
+float y;
+float z;
+
+Table inputTable;
+
+//Table outputTable = new Table();
+//outputTable.addColumn("x");
+//outputTable.addColumn("y");
+//outputTable.addColumn("z");
+//outputTable.addColumn("i");
+
+inputTable = loadTable(inputFilename+".csv","header");  //our file has a header
+println("loaded " + inputFilename + ".csv");
+println(inputTable.getRowCount() + " total rows in table");
+
+myOutput = createWriter(outputFilename+".CSV");
+myOutput.println("x,y,z,i");
+
+for (TableRow row : inputTable.rows()) { 
+  range = row.getFloat(0);
+  azimuth = row.getFloat(1);
+  elevation = row.getFloat(2);
+  intensity = row.getFloat(3);
+  
+  //Only do conversion if range is within capability < 50m
+  //If measurement is below 0.15 we get strange values
+  if(range < 50.0) {
+    x = range*sin(elevation)*cos(azimuth);
+    y = range*sin(elevation)*sin(azimuth);
+    z = range*cos(elevation);
+  
+    //Save memory and write append to output file
+    myOutput.println(x + "," + y + "," + z + "," + i);
+    //output for debug
+    //println(x + "," + y + "," + z + "," + i);
+  }
+  
+  //TableRow newRow = outputTable.addRow();
+  //newRow.setFloat("x", x);
+  //newRow.setFloat("y", y);
+  //newRow.setFloat("z", z);
+  //newRow.setFloat("i", i);
+}
+
+myOutput.flush();
+myOutput.close();
+//saveTable(outputTable, "output/OL1xyz.CSV");
