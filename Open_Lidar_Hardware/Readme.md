@@ -10,6 +10,20 @@ The current iteration assumes that the lidar will be 3D printed. It is recommend
 
 Design Mode. This project is still actively being designed. A final design has not been printed/verified yet. 
 
+# Tools Required
+
+- 3D Printer (Optional...can order print from Shapeways)
+- Soldering Iron
+- Screwdriver
+- Multimeter (for setting voltage output of stepper motor drivers)
+- Loctite or superglue
+- Computer (for programming arduino)
+- USB micro cable (for programming arduino)
+
+# Plastic Body
+
+3D model in design. Will be located here for people who own 3d printers, and on Shapeways for people that wish to order a print.
+
 # Other hardware
 
 |Price|Qty|Part|Link|
