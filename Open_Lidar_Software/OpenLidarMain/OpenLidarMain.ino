@@ -1,3 +1,4 @@
+
 /*     Open Lidar Project Code
  *     Author: Adam Sampson
  *     
@@ -56,10 +57,7 @@
  */
 
 // Define Libraries
-//#include <BasicStepperDriver.h>
 #include <DRV8825.h>
-//#include <MultiDriver.h>
-//#include <SyncDriver.h>
 
 // Define whether or not to use DEBUG mode
 
@@ -69,54 +67,45 @@
  #define DEBUG_PRINTLN(x)  Serial.println (x)
  #define DEBUG_PRINT(x) Serial.print (x)
 #else
- #define DEBUG_PRINT(x)
- #define DEBUG_PRINTLN(x)
+ #define DEBUG_PRINT(x) // do nothing
+ #define DEBUG_PRINTLN(x) // do nothing
 #endif
 
 #define TerminalBAUD 9600  //38400    //Baud rate of serial or bluetooth output
 
-// define an array of characters to read serial into for bluetooth commands
-String serialData;
+// Define serial command object
+#define mySerial Serial // Define to serial you want to use...Serial for usb, Serial5 for bluetooth
+const byte numChars = 32;
+char receivedChars[numChars];
+boolean receiveFull = false;
+#define MAX_WORD_COUNT 3
+#define MIN_WORD_COUNT 2
+char *Words[MAX_WORD_COUNT];
+boolean lockSerial = false; // Some functions may want to allow only "Cancel" as a command
+boolean cancel = false; // Functions that allow cancel will check for this flag each major loop
 
-// define pins numbers
-// Motor 1A (pitch) connected to digital output pins
-#define pitchEN  2
-#define pitchM0  3
-#define pitchM1  4
-#define pitchM2  5
-#define pitchRST 6
-#define pitchSLP 7
-#define pitchSTP 8
-#define pitchDIR 9
+// Define motor structure
+typedef struct {
+  int EN;
+  int M0;
+  int M1;
+  int M2;
+  int RST;
+  int SLP;
+  int STP;
+  int DIR;
+  int steps; // Number of steps in a full turn
+  int microstep; //Fraction to microstep. I.E. 4 is quarter step.
+  int rpm; // Max speed of motor in rotations per minute
+}motorStruct;
 
-// Motor 0.6A (yaw) connected to digital output pins
-#define yawEN  12
-#define yawM0  24
-#define yawM1  25
-#define yawM2  26
-#define yawRST 27
-#define yawSLP 28
-#define yawSTP 29
-#define yawDIR 30
-
-// define motor profile
-//const int PROGMEM riseDelay1 = 2;
-//const int PROGMEM fallDelay1 = 2;
-//const int PROGMEM riseDelay2 = 2; 
-//const int PROGMEM fallDelay2 = 2;
-//const unsigned long PROGMEM pitchMotDelay = 300;
-//const unsigned long PROGMEM yawMotDelay = 300; 
-
-#define pitchStpPerDeg 400   // This is a 400 step motor aka 0.9deg
-#define pitchStepMode 4      //Quarter step mode
-#define pitchRPM 60
-#define yawStpPerDeg 200*40  // This is a 200 step motor aka 1.8deg and hooked up to a 40:1 worm gear
-#define yawStepMode 2        //Quarter step mode
-#define yawRPM 60
+motorStruct pitch = {2,3,4,5,6,7,8,9,400,4,30};
+motorStruct yaw = {12,24,25,26,27,28,29,30,8000,4,1};
 
 // Initiate the motors using the DRV8825 library
-DRV8825 pitchMot(pitchStpPerDeg,pitchDIR,pitchSTP,pitchEN,pitchM0,pitchM1,pitchM2);
-DRV8825 yawMot(yawStpPerDeg,yawDIR,yawSTP,yawEN,yawM0,yawM1,yawM2);
+DRV8825 pitchMot(pitch.steps,pitch.DIR,pitch.STP,pitch.EN,pitch.M0,pitch.M1,pitch.M2);
+DRV8825 yawMot(yaw.steps,yaw.DIR,yaw.STP,yaw.EN,yaw.M0,yaw.M1,yaw.M2);
+
 
 /*
 * Setup Function - Run once
@@ -124,76 +113,48 @@ DRV8825 yawMot(yawStpPerDeg,yawDIR,yawSTP,yawEN,yawM0,yawM1,yawM2);
 void setup() {
   // put your setup code here, to run once:
   // Set serial communication over usb
-  Serial.begin(TerminalBAUD);
+  mySerial.begin(TerminalBAUD);
   // Set serial for bluetooth
   //Serial5.begin(TerminalBAUD);
   //while (!Serial);  //Wait for serial before doing anything else
+  
+  // define pins numbers
+  // Motor 1A (pitch) connected to digital output pins
+  // EN;M0;M1;M2;RST;SLP;STP;DIR;steps;microstep;rpm; 
+//  pitch = {2,3,4,5,6,7,8,9};
+//  pitch.steps = 400;
+//  pitch.microstep = 4;
+//  pitch.rpm = 30;
+  
+  // Motor 0.6A (yaw) connected to digital output pins
+  // EN;M0;M1;M2;RST;SLP;STP;DIR;steps;microstep;rpm; 
+//  yaw = {12,24,25,26,27,28,29,30};
+//  yaw.steps = 200 * 40; // The yaw motor is connected to a 40:1 worm gear
+//  yaw.microstep = 4;
+//  yaw.rpm = 1; // 30/40 as integer
 
   //mot.begin(rpm,microsteps)
   //pitchMot.begin(pitchRPM, pitchStepMode);
   //yawMot.begin(yawRPM, yawStepMode);
-  pitchMot.begin(30,1);
-  yawMot.begin(1,1);
-  pitchMot.disable();
-  yawMot.disable();
+  //pitchMot.begin(pitch.rpm,pitch.microstep);
+  //yawMot.begin(yaw.rpm,yaw.microstep);
 
-  pinMode(pitchSLP, OUTPUT);
-  pinMode(pitchRST, OUTPUT);
-  pinMode(yawSLP,   OUTPUT);
-  pinMode(yawRST,   OUTPUT);
-  digitalWrite(pitchSLP,HIGH);
-  digitalWrite(yawSLP,  HIGH);
-  digitalWrite(pitchRST,HIGH);
-  digitalWrite(yawRST  ,HIGH);  
+  pitchMot.begin(pitch.rpm);
+  yawMot.begin(yaw.rpm);
   
-  //pitchMot = new DRV8825(pitchStpPerDeg,pitchDIR,pitchSTP,pitchEN,pitchM0,pitchM1,pitchM2);
-  //yawMot = new DRV8825(yawStpPerDeg,yawDIR,yawSTP,yawEN,yawM0,yawM1,yawM2);
+  pitchMot.disable(); // No need to use power until command received
+  yawMot.disable(); // No need to use power until command received
 
-//  // Initialize Motor Pins as outputs
-//  pinMode(pitchEN ,OUTPUT);
-//  pinMode(pitchM0 ,OUTPUT);
-//  pinMode(pitchM1 ,OUTPUT);
-//  pinMode(pitchM2 ,OUTPUT);
-//  pinMode(pitchRST,OUTPUT);
-//  pinMode(pitchSLP,OUTPUT);
-//  pinMode(pitchSTP,OUTPUT);
-//  pinMode(pitchDIR,OUTPUT);
-//                
-//  pinMode(yawEN   ,OUTPUT);
-//  pinMode(yawM0   ,OUTPUT);
-//  pinMode(yawM1   ,OUTPUT);
-//  pinMode(yawM2   ,OUTPUT);
-//  pinMode(yawRST  ,OUTPUT);
-//  pinMode(yawSLP  ,OUTPUT);
-//  pinMode(yawSTP  ,OUTPUT);
-//  pinMode(yawDIR  ,OUTPUT);
-//  
-//  // Set motors to sleep mode to conserve power
-//  digitalWrite(pitchSLP,LOW);
-//  digitalWrite(yawSLP,  LOW);
-//
-//  // Set engable to low (enabled) for later
-//  digitalWrite(pitchEN ,LOW);            
-//  digitalWrite(yawEN   ,LOW);
-//  
-//  // Set mode pins to LOW for full step default
-//  digitalWrite(pitchM0 ,LOW);
-//  digitalWrite(pitchM1 ,LOW);
-//  digitalWrite(pitchM2 ,LOW); 
-//  digitalWrite(yawM0   ,LOW);
-//  digitalWrite(yawM1   ,LOW);
-//  digitalWrite(yawM2   ,LOW);
-//
-//  // Set reset to high (enabled)
-//  digitalWrite(pitchRST,HIGH);
-//  digitalWrite(yawRST  ,HIGH);
-//
-//  // Set stp and dir to low. 
-//  digitalWrite(pitchSTP,LOW); 
-//  digitalWrite(yawSTP  ,LOW);
-//  
-//  digitalWrite(pitchDIR,LOW);
-//  digitalWrite(yawDIR  ,LOW);
+  pinMode(pitch.SLP, OUTPUT);
+  pinMode(pitch.RST, OUTPUT);
+  pinMode(yaw.SLP,   OUTPUT);
+  pinMode(yaw.RST,   OUTPUT);
+
+  // Disable sleep and set reset. Rely on EN pin to enable or disable stepper.
+  digitalWrite(pitch.SLP,LOW);
+  digitalWrite(yaw.SLP,  LOW);
+  digitalWrite(pitch.RST,LOW);
+  digitalWrite(yaw.RST  ,LOW);  
 
   DEBUG_PRINTLN(F("Setup complete"));
 }
@@ -205,55 +166,206 @@ void loop() {
   // Set variables
 
   //delay(5000); // 5 second delay to get hands out of the way
+  checkSerial();
+  cancel = false; // The loop doesn't care about cancel, so uncheck it
+}
 
-  // If in debug mode isten for usb commands
-  #ifdef DEBUG
-  while(Serial.available()) {
-    serialData = Serial.readString(); //read incoming data as a string
-    DEBUG_PRINT("OL recieved: ");
-    DEBUG_PRINTLN(serialData);
-  }
-  #endif
+void checkSerial(){
+  static byte ndx = 0;
+  char endMarker = '\n';
+  char rc;
   
-  //Listen for bluetooth commands
-  while(Serial5.available()) {
-    serialData = Serial5.readString(); //read incoming data as a string
-    //DEBUG_PRINT("OL recieved: ");
-    DEBUG_PRINTLN(serialData);
+  while(mySerial.available()>0 && receiveFull == false){
+    // DEBUG_PRINT("Receiving Data.");
+    rc = mySerial.read();
+    if (rc != endMarker){
+      receivedChars[ndx] = rc;
+      ndx++;
+      if(ndx >= numChars) { //string not allowed to exceed numChars
+        ndx = numChars - 1;
+      }
+    }
+    else {
+      receivedChars[ndx] = '\0'; // terminate the string
+      ndx = 0;
+      receiveFull = true;
+    }
   }
 
-  //Decide what to do with the command recieved
-  if(serialData.startsWith(F("TestMotors"))) {
-    pitchMot.enable();
-    pitchMot.rotate(360);
-    pitchMot.disable();
-
-    yawMot.enable();
-    yawMot.rotate(360);
-    yawMot.disable();
-    DEBUG_PRINTLN("Test Motor Function Run.");
-    serialData = "";
-  }
-  else if(serialData.startsWith(F("MotorsOn"))) {
-    pitchMot.enable();
-    yawMot.enable();
-    DEBUG_PRINTLN("Enable Motor Function Run.");
-    serialData = "";
-  }
-  else if(serialData.startsWith(F("MotorsOff"))) {
-    pitchMot.disable();
-    yawMot.disable();
-    DEBUG_PRINTLN("Disable Motor Function Run.");
-    serialData = "";
-  }
-  else if (serialData.startsWith(F("ScanRoom"))) {
-    delay(1);
-    //scanRoom(); 
-    //Unset the command string so we don't repeat next loop
-    serialData = ""; 
+  if (receiveFull == true){
+    parseCommand();
+    receiveFull = false;
   }
 }
 
+void parseCommand(){
+  DEBUG_PRINT(F("Parsed Command:"));
+  byte word_count = 0;
+  int temp;
+  char * item = strtok (receivedChars, " ,"); //getting first word (uses space & comma as delimeter)
+  
+  while (item) {
+    if (word_count >= MAX_WORD_COUNT) {
+      break;
+    }
+    Words[word_count] = item;
+    item = strtok (NULL, " ,"); //getting subsequence word
+    word_count++;
+  }
+
+  #ifdef DEBUG
+  if(Words[0]) {
+    DEBUG_PRINT(Words[0]);
+    DEBUG_PRINT(" ");
+  }
+  if(Words[1]) {
+    DEBUG_PRINT(Words[1]);
+    DEBUG_PRINT(" ");
+  }
+  if(Words[2]) {
+    DEBUG_PRINT(Words[2]);
+    DEBUG_PRINT(" ");
+  }
+  DEBUG_PRINTLN("...");
+  #endif
+
+  // If a function has locked serial it will only accept the "cancel" command
+  if(lockSerial == true){
+    if(strcmp(Words[0],"cancel") == 0){
+      cancel = true;
+      DEBUG_PRINTLN("Cancel received and flagged.");
+    }
+  }
+  // If the serial isn't locked run any function requested
+  else {
+    if(strcmp(Words[0],"pitch") == 0){
+      DEBUG_PRINT("Pitch received. ");
+      if(strcmp(Words[1],"turn") == 0){
+        DEBUG_PRINT(Words[1]);
+        if(Words[2]){
+          temp = atoi(Words[2]);
+          DEBUG_PRINTLN(temp);
+          pitchMot.rotate(temp);
+        }
+      }
+      else if(strcmp(Words[1],"rpm") == 0){
+        if(Words[2]){
+          temp = atoi(Words[2]);
+          pitch.rpm = temp;
+          pitchMot.setRPM(pitch.rpm);
+        }
+      }
+      else if(strcmp(Words[1],"microstep") == 0){
+        if(Words[2]){
+          temp = atoi(Words[2]);
+          pitch.microstep = temp;
+          pitchMot.setMicrostep(pitch.microstep);
+        }
+      }
+      else if(strcmp(Words[1],"enable") == 0){
+        digitalWrite(pitch.SLP,HIGH);
+        digitalWrite(pitch.RST,HIGH);
+        pitchMot.enable();
+      }
+      else if(strcmp(Words[1],"disable") == 0){
+        pitchMot.disable();
+        digitalWrite(pitch.SLP,LOW);
+        digitalWrite(pitch.RST,LOW);
+      }
+    }
+    else if(strcmp(Words[0],"yaw") == 0){
+      DEBUG_PRINTLN("Yaw received.");
+      if(strcmp(Words[1],"turn") == 0){
+        DEBUG_PRINT(Words[1]);
+        if(Words[2]){
+          temp = atoi(Words[2]);
+          DEBUG_PRINTLN(temp);
+          yawMot.rotate(temp);
+        }
+      }
+      else if(strcmp(Words[1],"rpm") == 0){
+        if(Words[2]){
+          temp = atoi(Words[2]);
+          yaw.rpm = temp;
+          yawMot.setRPM(yaw.rpm);
+        }
+      }
+      else if(strcmp(Words[1],"microstep") == 0){
+        if(Words[2]){
+          temp = atoi(Words[2]);
+          yaw.microstep = temp;
+          yawMot.setMicrostep(yaw.microstep);
+        }
+      }
+      else if(strcmp(Words[1],"enable") == 0){
+        digitalWrite(yaw.SLP,HIGH);
+        digitalWrite(yaw.RST,HIGH);
+        yawMot.enable();
+      }
+      else if(strcmp(Words[1],"disable") == 0){
+        yawMot.disable();
+        digitalWrite(yaw.SLP,LOW);
+        digitalWrite(yaw.RST,LOW);
+      }
+    }
+    else if(strcmp(Words[0],"lidar") == 0){
+      DEBUG_PRINTLN("Lidar received.");
+    }
+    else if(strcmp(Words[0],"bluetooth") == 0){
+      DEBUG_PRINTLN("Bluetooth received.");
+    }
+    else if(strcmp(Words[0],"sd") == 0){
+      DEBUG_PRINTLN("SD received.");
+    }
+    else if(strcmp(Words[0],"motor") == 0){
+      DEBUG_PRINTLN("Motor received.");
+      if(strcmp(Words[1],"enable")==0) enableMotors();
+      else if(strcmp(Words[1],"disable")==0) disableMotors();
+    }
+  }
+}
+
+void clearSerial(){
+  while(mySerial.available() > 0){
+    mySerial.read();
+  }
+}
+
+void enableMotors() {
+  digitalWrite(pitch.SLP,HIGH);
+  digitalWrite(pitch.RST,HIGH);
+  pitchMot.enable();
+  digitalWrite(yaw.SLP,  HIGH);
+  digitalWrite(yaw.RST  ,HIGH);  
+  yawMot.enable();
+}
+
+void disableMotors() {
+  pitchMot.disable();
+  digitalWrite(pitch.SLP,LOW);
+  digitalWrite(pitch.RST,LOW);
+  yawMot.disable();
+  digitalWrite(yaw.SLP,  LOW);
+  digitalWrite(yaw.RST  ,LOW);  
+}
+
+/*
+ * Parse a C string
+ */
+//inline void split(char* inVal, char outVal[NUM_WORDS][STRING_LEN])
+//{
+//    int i = 0;
+//    char *p = strtok(inVal, " ,/");
+//    strcpy(&outVal[i++][0], p);
+//    while (p)
+//    {
+//      p = strtok(NULL, " ,/");
+//      if (p)
+//      {
+//          strcpy(&outVal[i++][0], p);
+//      }
+//    }
+//}
 
 /*
 * createNewFile function - as name says
