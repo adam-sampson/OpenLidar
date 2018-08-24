@@ -58,23 +58,17 @@
 
 // Define Libraries
 #include <DRV8825.h>
+// #include <Wire.h>
+#include <i2c_t3.h>
+#include <I2CFunctions.h> 
+#include <LidarObject.h>
+#include <LidarController.h>
 
 // Define whether or not to use DEBUG mode
-
 #define DEBUG
 
-#ifdef DEBUG
- #define DEBUG_PRINTLN(x)  Serial.println (x)
- #define DEBUG_PRINT(x) Serial.print (x)
-#else
- #define DEBUG_PRINT(x) // do nothing
- #define DEBUG_PRINTLN(x) // do nothing
-#endif
-
-#define TerminalBAUD 9600  //38400    //Baud rate of serial or bluetooth output
-
 // Define serial command object
-#define mySerial Serial // Define to serial you want to use...Serial for usb, Serial5 for bluetooth
+#define mySerial Serial5 // Define to serial you want to use...Serial for usb, Serial5 for bluetooth
 const byte numChars = 32;
 char receivedChars[numChars];
 boolean receiveFull = false;
@@ -83,6 +77,39 @@ boolean receiveFull = false;
 char *Words[MAX_WORD_COUNT];
 boolean lockSerial = false; // Some functions may want to allow only "Cancel" as a command
 boolean cancel = false; // Functions that allow cancel will check for this flag each major loop
+
+#ifdef DEBUG
+ #define DEBUG_PRINTLN(x)  mySerial.println (x)
+ #define DEBUG_PRINT(x) mySerial.print (x)
+#else
+ #define DEBUG_PRINT(x) // do nothing
+ #define DEBUG_PRINTLN(x) // do nothing
+#endif
+
+#define TerminalBAUD 9600  //38400    //Baud rate of serial or bluetooth output
+
+// Define Lidar related variables
+#define WIRE400K true
+// Trigger pin, can be unplugged
+#define Z1_LASER_TRIG 0
+// Enable pin, IMPORTANT
+#define Z1_LASER_EN 17
+// Mode pin, can be unplugged
+#define Z1_LASER_PIN 0
+//Define address of lasers
+//Thoses are written during initialisation
+// default address : 0x62
+#define Z1_LASER_AD 0x62
+
+#define NUMBER_OF_LASERS 1
+
+// Delays
+long currMicro, lastMicro;
+
+// Create lasers
+static LidarController Controller;
+static LidarObject LZ1;
+
 
 // Define motor structure
 typedef struct {
@@ -112,32 +139,8 @@ DRV8825 yawMot(yaw.steps,yaw.DIR,yaw.STP,yaw.EN,yaw.M0,yaw.M1,yaw.M2);
 */
 void setup() {
   // put your setup code here, to run once:
-  // Set serial communication over usb
+  // Set serial communication for whichever serial port chosen above
   mySerial.begin(TerminalBAUD);
-  // Set serial for bluetooth
-  //Serial5.begin(TerminalBAUD);
-  //while (!Serial);  //Wait for serial before doing anything else
-  
-  // define pins numbers
-  // Motor 1A (pitch) connected to digital output pins
-  // EN;M0;M1;M2;RST;SLP;STP;DIR;steps;microstep;rpm; 
-//  pitch = {2,3,4,5,6,7,8,9};
-//  pitch.steps = 400;
-//  pitch.microstep = 4;
-//  pitch.rpm = 30;
-  
-  // Motor 0.6A (yaw) connected to digital output pins
-  // EN;M0;M1;M2;RST;SLP;STP;DIR;steps;microstep;rpm; 
-//  yaw = {12,24,25,26,27,28,29,30};
-//  yaw.steps = 200 * 40; // The yaw motor is connected to a 40:1 worm gear
-//  yaw.microstep = 4;
-//  yaw.rpm = 1; // 30/40 as integer
-
-  //mot.begin(rpm,microsteps)
-  //pitchMot.begin(pitchRPM, pitchStepMode);
-  //yawMot.begin(yawRPM, yawStepMode);
-  //pitchMot.begin(pitch.rpm,pitch.microstep);
-  //yawMot.begin(yaw.rpm,yaw.microstep);
 
   pitchMot.begin(pitch.rpm);
   yawMot.begin(yaw.rpm);
@@ -156,7 +159,17 @@ void setup() {
   digitalWrite(pitch.RST,LOW);
   digitalWrite(yaw.RST  ,LOW);  
 
-  DEBUG_PRINTLN(F("Setup complete"));
+  // Configure lasers
+  LZ1.begin(Z1_LASER_EN, Z1_LASER_PIN, Z1_LASER_TRIG, Z1_LASER_AD, 2, DISTANCE, 'A');
+  LZ1.setCallbackDistance(&distance_callback);
+  // Add the laser to the Controller
+  Controller.add(&LZ1, 0);
+  
+  delay(100);
+  Controller.begin(WIRE400K);
+  delay(100);
+
+  mySerial.println(F("OpenLidar Ready."));
 }
 
 /*
@@ -172,7 +185,7 @@ void loop() {
 
 void checkSerial(){
   static byte ndx = 0;
-  char endMarker = '\n';
+  char endMarker = ';';
   char rc;
   
   while(mySerial.available()>0 && receiveFull == false){
@@ -310,6 +323,13 @@ void parseCommand(){
     }
     else if(strcmp(Words[0],"lidar") == 0){
       DEBUG_PRINTLN("Lidar received.");
+      if(strcmp(Words[1],"dist") == 0){
+        DEBUG_PRINT(Words[1]);
+        // Take a lidar distance
+        Controller.spinOnce();
+        //delay(10);
+        //laserprint();
+      }
     }
     else if(strcmp(Words[0],"bluetooth") == 0){
       DEBUG_PRINTLN("Bluetooth received.");
@@ -323,6 +343,15 @@ void parseCommand(){
       else if(strcmp(Words[1],"disable")==0) disableMotors();
     }
   }
+}
+
+void laserprint(){
+  mySerial.print(" Measure: ");
+  mySerial.print(LZ1.distance);
+  mySerial.print(" Signal strength: ");
+  mySerial.println(LZ1.strength);
+  mySerial.print(" Velocity: ");
+  mySerial.println(LZ1.velocity);
 }
 
 void clearSerial(){
@@ -347,6 +376,10 @@ void disableMotors() {
   yawMot.disable();
   digitalWrite(yaw.SLP,  LOW);
   digitalWrite(yaw.RST  ,LOW);  
+}
+
+void distance_callback(LidarObject* self){
+   DEBUG_PRINTLN(self->distance);
 }
 
 /*
