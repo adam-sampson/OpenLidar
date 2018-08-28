@@ -135,6 +135,7 @@ typedef struct {
 
 motorStruct pitch = {2,3,4,5,6,7,8,9,400,32,180};
 motorStruct yaw = {12,24,25,26,27,28,29,30,8000,32,10};
+float maxYawDeg = 180;
 
 // Initiate the motors using the DRV8825 library
 DRV8825 pitchMot(pitch.steps,pitch.DIR,pitch.STP,pitch.EN,pitch.M0,pitch.M1,pitch.M2);
@@ -393,6 +394,10 @@ void parseCommand(){
         digitalWrite(yaw.SLP,LOW);
         digitalWrite(yaw.RST,LOW);
       }
+      else if(strcmp(Words[1],"max") == 0){
+        temp = atoi(Words[2]);
+        maxYawDeg = (float)temp;
+      }
     }
     else if(strcmp(Words[0],"lidar") == 0){
       DEBUG_PRINTLN("Lidar received.");
@@ -523,7 +528,7 @@ void simpleScan(char* skipVar) {
   //int skipPitch;
   //int skipYaw;
   float skipDeg;
-  int currDir = 1;
+  float currDir = 1.0;
   boolean lidarError = false;
 //  int timeout = 0;
   //char byteBuf[sizeof(reading)];
@@ -584,7 +589,7 @@ void simpleScan(char* skipVar) {
 
   // Yaw only has to turn half-way around because pitch goes up and over
   //int maxYawSteps = (yaw.steps*yaw.microstep)/2;
-  float maxYawDeg = 180.0;
+  //float maxYawDeg = 180.0;
 
   lastMicro = micros();
 
@@ -630,7 +635,7 @@ void simpleScan(char* skipVar) {
   //delayMicroseconds(shotMicroDelay);
   lidarError = lidarOnce();
     if(!lidarError){
-      reading.radius = LZ1.distance;
+      reading.radius = LZ1.distance - 2; //offset for lidar lite mount
       reading.intensity = LZ1.strength;
       reading.pitch = 360.0*(float)(startOffset)/float(pitch.steps*pitch.microstep);
       reading.yaw = 0.0;
@@ -668,7 +673,7 @@ void simpleScan(char* skipVar) {
   
   // for each yaw
   //for testing purposes limit maxYawSteps artificially
-  maxYawDeg = 1.8;
+  //maxYawDeg = 1.8;
   for(float i=0; i<=maxYawDeg; i=i+skipDeg){
     // Check for cancel command
     checkSerial();
@@ -689,7 +694,6 @@ void simpleScan(char* skipVar) {
     DEBUG_PRINT(": ");
     //laserprint();
     if(!lidarError){
-      if(!lidarError){
         DEBUG_PRINT(reading.radius);
         DEBUG_PRINT(",");
         DEBUG_PRINT(reading.yaw);
@@ -698,7 +702,6 @@ void simpleScan(char* skipVar) {
         DEBUG_PRINT(",");
         DEBUG_PRINT(reading.intensity);
         DEBUG_PRINT("\n");
-      }
     }
     
     // perform a full pitch scan
@@ -706,12 +709,14 @@ void simpleScan(char* skipVar) {
     for(float j=startOffset; j<maxPitchDeg; j=j+skipDeg){
       //move pitch motor
       //pitchMot.move(currDir*skipPitch);
-      pitchMot.rotate(currDir*skipDeg);
+      //pitchMot.rotate(startOffset);
+      pitchMot.rotate(currDir*skipDeg); // Don't know why this isn't working.
+      //pitchMot.rotate(skipDeg);
       
       //take a reading
       lidarError = lidarOnce();
       if(!lidarError){
-        reading.radius = LZ1.distance;
+        reading.radius = LZ1.distance - 2; //offset for lidar lite mount
         reading.intensity = LZ1.strength;
         reading.pitch = j;
         reading.yaw = i;
@@ -727,7 +732,7 @@ void simpleScan(char* skipVar) {
       //Controller.spinOnce();
       //delayMicroseconds(shotMicroDelay);
       //reading.radius = LZ1.distance;
-      //reading.intensity = LZ1.strength;
+      //reading.radius = LZ1.distance - 2; //offset for lidar lite mount
       //reading.pitch = j;
       //reading.yaw = i;
 
@@ -741,9 +746,9 @@ void simpleScan(char* skipVar) {
       //file.print("\n");
     }
     // after pitch done change direction of pitch
-    currDir = -1*currDir;
+    currDir = -1.0*currDir;
     //move yaw motor
-    yawMot.move(skipDeg);
+    yawMot.rotate(skipDeg);
   }
 
   // close SD file
