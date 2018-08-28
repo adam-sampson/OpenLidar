@@ -1,4 +1,3 @@
-
 /*     Open Lidar Project Code
  *     Author: Adam Sampson
  *     
@@ -54,7 +53,12 @@
  *     Lidar Lite V3 connected to I2C pins
  *       SCL0 - digital pin 19
  *       SDA0 - digital pin 18
- */
+ *
+ * Warning SdFatSdio and SdFatSdioEX normally should 
+ * not both be used in a program.
+ * Each has its own cache and member variables.
+ * 
+  */
 
 // Define Libraries
 #include <DRV8825.h>
@@ -63,6 +67,7 @@
 #include <I2CFunctions.h> 
 #include <LidarObject.h>
 #include <LidarController.h>
+#include "SdFat.h"
 
 // Define whether or not to use DEBUG mode
 #define DEBUG
@@ -105,11 +110,13 @@ boolean cancel = false; // Functions that allow cancel will check for this flag 
 
 // Delays
 long currMicro, lastMicro;
+int shotMicroDelay = 100;
+boolean distanceReady = false;
+int microCnt;
 
 // Create lasers
 static LidarController Controller;
 static LidarObject LZ1;
-
 
 // Define motor structure
 typedef struct {
@@ -126,19 +133,42 @@ typedef struct {
   int rpm; // Max speed of motor in rotations per minute
 }motorStruct;
 
-motorStruct pitch = {2,3,4,5,6,7,8,9,400,4,30};
-motorStruct yaw = {12,24,25,26,27,28,29,30,8000,4,1};
+motorStruct pitch = {2,3,4,5,6,7,8,9,400,32,180};
+motorStruct yaw = {12,24,25,26,27,28,29,30,8000,32,10};
 
 // Initiate the motors using the DRV8825 library
 DRV8825 pitchMot(pitch.steps,pitch.DIR,pitch.STP,pitch.EN,pitch.M0,pitch.M1,pitch.M2);
 DRV8825 yawMot(yaw.steps,yaw.DIR,yaw.STP,yaw.EN,yaw.M0,yaw.M1,yaw.M2);
 
+// Define variables for writing to the SD Card
+//==============================================================================
+// Error messages stored in flash.
+#define error(msg) sd.errorHalt(F(msg))
+
+// file system
+SdFatSdio sd;
+SdFile file;
+
+// Log file base name.  Must be six characters or less.
+#define FILE_BASE_NAME "OL"
+char fileName[10] = FILE_BASE_NAME "000.sph";
+
+// define a struct to hold a lidar reading
+typedef struct{
+  uint16_t radius;
+  float yaw;
+  float pitch;
+  byte intensity;
+}Readings;
+
+Readings reading;
 
 /*
 * Setup Function - Run once
 */
 void setup() {
   // put your setup code here, to run once:
+  
   // Set serial communication for whichever serial port chosen above
   mySerial.begin(TerminalBAUD);
 
@@ -169,6 +199,11 @@ void setup() {
   Controller.begin(WIRE400K);
   delay(100);
 
+  //setup sd card
+  if (!sd.begin()) {
+    sd.initErrorHalt();
+  }
+
   mySerial.println(F("OpenLidar Ready."));
 }
 
@@ -181,6 +216,34 @@ void loop() {
   //delay(5000); // 5 second delay to get hands out of the way
   checkSerial();
   cancel = false; // The loop doesn't care about cancel, so uncheck it
+}
+
+// Write data header.
+void writeHeader() {
+  file.print(F("radius(int),pitch(flt),yaw(flt),intensity(byte)"));
+  file.println();
+}
+
+// Find a new file name
+void findFileName(){
+  // Find an unused file name.
+  uint8_t BASE_NAME_SIZE = sizeof(FILE_BASE_NAME) - 1;
+  if (BASE_NAME_SIZE > 6) {
+    error("FILE_BASE_NAME too long");
+  }
+  while (sd.exists(fileName)) {
+    if (fileName[BASE_NAME_SIZE + 2] != '9') {
+      fileName[BASE_NAME_SIZE + 2]++;
+    } else if (fileName[BASE_NAME_SIZE+1] != '9') {
+      fileName[BASE_NAME_SIZE + 2] = '0';
+      fileName[BASE_NAME_SIZE+1]++;
+    } else if (fileName[BASE_NAME_SIZE] != '9') {
+      fileName[BASE_NAME_SIZE + 1] = '0';
+      fileName[BASE_NAME_SIZE]++;
+    } else {
+      error("Can't create file name");
+    }
+  }
 }
 
 void checkSerial(){
@@ -207,12 +270,12 @@ void checkSerial(){
 
   if (receiveFull == true){
     parseCommand();
-    receiveFull = false;
   }
 }
 
 void parseCommand(){
   DEBUG_PRINT(F("Parsed Command:"));
+  receiveFull = false;
   byte word_count = 0;
   int temp;
   char * item = strtok (receivedChars, " ,"); //getting first word (uses space & comma as delimeter)
@@ -223,6 +286,12 @@ void parseCommand(){
     }
     Words[word_count] = item;
     item = strtok (NULL, " ,"); //getting subsequence word
+    word_count++;
+  }
+  // Clear words from previous loops
+  while (word_count < MAX_WORD_COUNT) {
+    item = "";
+    Words[word_count] = item;
     word_count++;
   }
 
@@ -251,7 +320,11 @@ void parseCommand(){
   }
   // If the serial isn't locked run any function requested
   else {
-    if(strcmp(Words[0],"pitch") == 0){
+    if(strcmp(Words[0],"cancel") == 0){
+      cancel = true;
+      DEBUG_PRINTLN("Cancel received and flagged.");
+    }
+    else if(strcmp(Words[0],"pitch") == 0){
       DEBUG_PRINT("Pitch received. ");
       if(strcmp(Words[1],"turn") == 0){
         DEBUG_PRINT(Words[1]);
@@ -327,8 +400,20 @@ void parseCommand(){
         DEBUG_PRINT(Words[1]);
         // Take a lidar distance
         Controller.spinOnce();
-        //delay(10);
-        //laserprint();
+        delay(10);
+        laserprint();
+      }
+      else if(strcmp(Words[1],"scan") == 0){
+        DEBUG_PRINT(Words[1]);
+        if(Words[2]){
+          simpleScan(Words[2]);
+        }
+      }
+      else if(strcmp(Words[1],"test") == 0){
+        DEBUG_PRINT("Distance Ready? ");
+        DEBUG_PRINTLN(distanceReady);
+        DEBUG_PRINT(Words[1]);
+        testLidarCallback();
       }
     }
     else if(strcmp(Words[0],"bluetooth") == 0){
@@ -336,6 +421,15 @@ void parseCommand(){
     }
     else if(strcmp(Words[0],"sd") == 0){
       DEBUG_PRINTLN("SD received.");
+      if(strcmp(Words[1],"test")==0){
+        DEBUG_PRINT(Words[1]);
+        if(Words[2]){
+          testSD(Words[2]);
+        } else {
+          Words[2] = "Test";
+          testSD(Words[2]);
+        }
+      }
     }
     else if(strcmp(Words[0],"motor") == 0){
       DEBUG_PRINTLN("Motor received.");
@@ -345,13 +439,18 @@ void parseCommand(){
   }
 }
 
+void testLidarCallback(){
+  microCnt = micros();
+  Controller.spinOnce();
+}
+
 void laserprint(){
   mySerial.print(" Measure: ");
   mySerial.print(LZ1.distance);
   mySerial.print(" Signal strength: ");
   mySerial.println(LZ1.strength);
-  mySerial.print(" Velocity: ");
-  mySerial.println(LZ1.velocity);
+  //mySerial.print(" Velocity: ");
+  //mySerial.println(LZ1.velocity);
 }
 
 void clearSerial(){
@@ -378,69 +477,284 @@ void disableMotors() {
   digitalWrite(yaw.RST  ,LOW);  
 }
 
-void distance_callback(LidarObject* self){
-   DEBUG_PRINTLN(self->distance);
+void testSD(char* inText){
+  // Open the file for writing
+  char testFile[10] = "test.txt";
+  if (!file.open(testFile, O_CREAT | O_WRITE | O_EXCL)) {
+    DEBUG_PRINTLN("Error Opening File");
+    error("file.open");
+    return;
+  }
+  
+  // Write a header
+  writeHeader();
+
+  file.print(inText);
+  file.close();
 }
 
-/*
- * Parse a C string
- */
-//inline void split(char* inVal, char outVal[NUM_WORDS][STRING_LEN])
-//{
-//    int i = 0;
-//    char *p = strtok(inVal, " ,/");
-//    strcpy(&outVal[i++][0], p);
-//    while (p)
-//    {
-//      p = strtok(NULL, " ,/");
-//      if (p)
-//      {
-//          strcpy(&outVal[i++][0], p);
-//      }
-//    }
-//}
+void distance_callback(LidarObject* self){
+  //int microDiff = micros() - microCnt;
+   //DEBUG_PRINT("Dist: ");
+   //DEBUG_PRINT(self->distance);
+   //DEBUG_PRINT(" after microseconds: ");
+   //DEBUG_PRINTLN(microDiff);
+   distanceReady = true;
+}
 
-/*
-* createNewFile function - as name says
-* Check to see if file is taken and increment until unique name is found
-* Return file name for use.
-*/
-//String createNewFileName() {
-//  //This is a quick and dirty way to make sure a new file is created.
-//  //In the future ROM will be used to track file numbers.
-//  DEBUG_PRINTLN(F("Create FN"));
-//  delay(100);
-//  String baseFilename = "OL";
-//  String tempFilename;
-//  char tempBuffer[] = "OL1.CSV";
-//
-//  /*
-//  if (mySdStatus = 0) {
-//    DEBUG_PRINTLN(F("Initialization Failed."));
-//  }
-//  else {
-//    DEBUG_PRINTLN(F("SD was setup"));
-//  */
-//  
-//  for (int fileNumber = 1; fileNumber < 5; fileNumber++) {
-//    //DEBUG_PRINTLN("ForLoop");
-//    //delay(100);
-//    tempFilename = baseFilename + String(fileNumber, DEC) + ".csv";
-//    //tempFilename.toCharArray(tempBuffer,tempFilename.length()+1);
-//    DEBUG_PRINT(F("Temp file: "));
-//    DEBUG_PRINTLN(tempBuffer);
-//    delay(100);
-//    if (SD.exists(tempBuffer)) {  //if the file doesn't exist, return the name
-//      DEBUG_PRINT(F("Found new filename: "));
-//      delay(100);
-//      DEBUG_PRINTLN(tempFilename);
-//      return tempFilename;
+boolean lidarOnce(){
+  int timeout = 0;
+  //delayMicroseconds(100);
+    Controller.spinOnce();
+      while((!distanceReady) && timeout < 20){
+        delayMicroseconds(100);
+        timeout++;
+      }
+      if(timeout == 10){
+        return(true); //error
+      }
+  return(false); // no error
+}
+
+void simpleScan(char* skipVar) {
+  DEBUG_PRINTLN("Starting Simple Scan.");
+  // Calculate how many microsteps to move between each reading
+  // given number of steps in a full 360 turn of the device
+  //int skipPitch;
+  //int skipYaw;
+  float skipDeg;
+  int currDir = 1;
+  boolean lidarError = false;
+//  int timeout = 0;
+  //char byteBuf[sizeof(reading)];
+  
+  if(strcmp(skipVar,"0.9")==0){
+    //skipPitch = pitch.steps*pitch.microstep/400;
+    //skipYaw = yaw.steps*yaw.microstep/400;
+    skipDeg = 0.9;
+//    if(skipPitch == 0 || skipYaw == 0){
+//      DEBUG_PRINTLN("Resolution finer than microstep mode.");
 //    }
-//  //}
-//  }
-//  
-//  //return "OL0001.csv";
-//  DEBUG_PRINTLN(F("SD full")); 
-//  delay(100);
-//  return "";
-//}
+  } else if(strcmp(skipVar,"0.45")==0){
+    //skipPitch = pitch.steps*pitch.microstep/800;
+    //skipYaw = yaw.steps*yaw.microstep/800;
+    skipDeg = 0.45;
+//    if(skipPitch == 0 || skipYaw == 0){
+//      DEBUG_PRINTLN("Resolution finer than microstep mode.");
+//    }
+  } else if(strcmp(skipVar,"0.225")==0){
+    //skipPitch = pitch.steps*pitch.microstep/1600;
+    //skipYaw = yaw.steps*yaw.microstep/1600;
+    skipDeg = 0.225;
+//    if(skipPitch == 0 || skipYaw == 0){
+//      DEBUG_PRINTLN("Resolution finer than microstep mode.");
+//    }
+  } else {
+    DEBUG_PRINTLN("Can only scan in increments of 0.225,0.45,or 0.9.");
+    return;
+  }
+
+  enableMotors();
+
+  // Find a filename to use
+  findFileName();
+
+  // Open the file for writing
+  if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL)) {
+    DEBUG_PRINTLN("Error Opening File");
+    error("file.open");
+    return;
+  }
+  
+  // Write a header
+  writeHeader();
+
+  
+
+  // Assume that the device starts pointing straight down.
+  // Assume that the device has a blindspot straight down of ~36 deg.
+  // So we need to move pitch start point over by 0.225*100 = 22.5 deg.
+  // This is close to a blindspot of 45 deg and is extra conservative
+  // This is the same as saying the device needs to move over 1/16 of 
+  // the number of steps in a rotation.
+  //int startOffset = pitch.steps*pitch.microstep/16;
+  float startOffset = 22.5; //degrees
+  //int maxPitchSteps = (pitch.steps*pitch.microstep) - (2*startOffset);
+  float maxPitchDeg = 360.0 - startOffset;
+
+  // Yaw only has to turn half-way around because pitch goes up and over
+  //int maxYawSteps = (yaw.steps*yaw.microstep)/2;
+  float maxYawDeg = 180.0;
+
+  lastMicro = micros();
+
+  // Move to starting point
+  //pitchMot.move(startOffset);
+  pitchMot.rotate(startOffset);
+
+  DEBUG_PRINT("Motor offset took: ");
+  DEBUG_PRINTLN(micros()-lastMicro);
+
+  lastMicro = micros();
+
+  int countError = 0;
+  yield();
+  // Clear lidar buffer and warm up sensor
+  for(int k = 0; k < 1000; k++){
+    //timeout = 0;
+    distanceReady = false;
+    //delayMicroseconds(100);
+//    Controller.spinOnce();
+//      while((!distanceReady) && timeout < 20){
+//        delayMicroseconds(100);
+//        timeout++;
+//      }
+//      if(timeout == 10){
+//        countError++;
+//      }
+    lidarError = lidarOnce();
+    if(lidarError){
+      countError++;
+    }
+  }
+
+  DEBUG_PRINT("Warmup and Clearing Controller took: ");
+  DEBUG_PRINTLN(micros()-lastMicro);
+  DEBUG_PRINT("Error readings count: ");
+  DEBUG_PRINTLN(countError);
+
+  lastMicro = micros();
+  
+  // scan first point, then enter loop
+  //Controller.spinOnce();
+  //delayMicroseconds(shotMicroDelay);
+  lidarError = lidarOnce();
+    if(!lidarError){
+      reading.radius = LZ1.distance;
+      reading.intensity = LZ1.strength;
+      reading.pitch = 360.0*(float)(startOffset)/float(pitch.steps*pitch.microstep);
+      reading.yaw = 0.0;
+    }
+  
+  DEBUG_PRINT("First Lidar Shot took: ");
+  DEBUG_PRINTLN(micros()-lastMicro);
+
+  lastMicro = micros();
+  
+  if(!lidarError){
+    file.print(reading.radius);
+    file.print(",");
+    file.print(reading.yaw);
+    file.print(",");
+    file.print(reading.pitch);
+    file.print(",");
+    file.print(reading.intensity);
+    file.print("\n");
+  }
+  else {
+    DEBUG_PRINTLN("Unable to write to SD because of lidar error.");
+  }
+  
+  //write to sd card
+  // Convert to bytes
+  //memcpy(byteBuf, &reading, sizeof(reading));
+  // write
+  //file.write(byteBuf,sizeof(byteBuf));
+
+  DEBUG_PRINT("First SD write took: ");
+  DEBUG_PRINTLN(micros()-lastMicro);
+
+  lastMicro = micros();
+  
+  // for each yaw
+  //for testing purposes limit maxYawSteps artificially
+  maxYawDeg = 1.8;
+  for(float i=0; i<=maxYawDeg; i=i+skipDeg){
+    // Check for cancel command
+    checkSerial();
+    if(cancel){ 
+      file.close();
+      return; 
+    }
+    
+    // Clear lidar buffer
+    Controller.spinOnce();
+    delayMicroseconds(shotMicroDelay);
+    
+    DEBUG_PRINT("Scanning yaw ");
+    //DEBUG_PRINT(360.0*(float)(i)/float(yaw.steps*pitch.microstep));
+    DEBUG_PRINT(i);
+    DEBUG_PRINT(" at microseconds ");
+    DEBUG_PRINT(micros() - lastMicro);
+    DEBUG_PRINT(": ");
+    //laserprint();
+    if(!lidarError){
+      if(!lidarError){
+        DEBUG_PRINT(reading.radius);
+        DEBUG_PRINT(",");
+        DEBUG_PRINT(reading.yaw);
+        DEBUG_PRINT(",");
+        DEBUG_PRINT(reading.pitch);
+        DEBUG_PRINT(",");
+        DEBUG_PRINT(reading.intensity);
+        DEBUG_PRINT("\n");
+      }
+    }
+    
+    // perform a full pitch scan
+    
+    for(float j=startOffset; j<maxPitchDeg; j=j+skipDeg){
+      //move pitch motor
+      //pitchMot.move(currDir*skipPitch);
+      pitchMot.rotate(currDir*skipDeg);
+      
+      //take a reading
+      lidarError = lidarOnce();
+      if(!lidarError){
+        reading.radius = LZ1.distance;
+        reading.intensity = LZ1.strength;
+        reading.pitch = j;
+        reading.yaw = i;
+        file.print(reading.radius);
+        file.print(",");
+        file.print(reading.yaw);
+        file.print(",");
+        file.print(reading.pitch);
+        file.print(",");
+        file.print(reading.intensity);
+        file.print("\n");
+      }
+      //Controller.spinOnce();
+      //delayMicroseconds(shotMicroDelay);
+      //reading.radius = LZ1.distance;
+      //reading.intensity = LZ1.strength;
+      //reading.pitch = j;
+      //reading.yaw = i;
+
+      //file.print(reading.radius);
+      //file.print(",");
+      //file.print(reading.yaw);
+      //file.print(",");
+      //file.print(reading.pitch);
+      //file.print(",");
+      //file.print(reading.intensity);
+      //file.print("\n");
+    }
+    // after pitch done change direction of pitch
+    currDir = -1*currDir;
+    //move yaw motor
+    yawMot.move(skipDeg);
+  }
+
+  // close SD file
+  file.close();
+
+  currMicro = micros();
+
+  disableMotors();
+
+  DEBUG_PRINTLN("Simple Scan Complete.");
+  DEBUG_PRINT("Microseconds to complete: ");
+  DEBUG_PRINT(currMicro-lastMicro);
+  DEBUG_PRINTLN();
+}
