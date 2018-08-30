@@ -175,6 +175,10 @@ void setup() {
 
   pitchMot.begin(pitch.rpm);
   yawMot.begin(yaw.rpm);
+
+  // Set the microstep mode
+  pitchMot.setMicrostep(pitch.microstep);
+  yawMot.setMicrostep(yaw.microstep);
   
   pitchMot.disable(); // No need to use power until command received
   yawMot.disable(); // No need to use power until command received
@@ -279,6 +283,7 @@ void parseCommand(){
   receiveFull = false;
   byte word_count = 0;
   int temp;
+  float tempf;
   char * item = strtok (receivedChars, " ,"); //getting first word (uses space & comma as delimeter)
   
   while (item) {
@@ -330,9 +335,9 @@ void parseCommand(){
       if(strcmp(Words[1],"turn") == 0){
         DEBUG_PRINT(Words[1]);
         if(Words[2]){
-          temp = atoi(Words[2]);
-          DEBUG_PRINTLN(temp);
-          pitchMot.rotate(temp);
+          tempf = atof(Words[2]);
+          DEBUG_PRINTLN(tempf);
+          pitchMot.rotate(tempf);
         }
       }
       else if(strcmp(Words[1],"rpm") == 0){
@@ -365,9 +370,9 @@ void parseCommand(){
       if(strcmp(Words[1],"turn") == 0){
         DEBUG_PRINT(Words[1]);
         if(Words[2]){
-          temp = atoi(Words[2]);
-          DEBUG_PRINTLN(temp);
-          yawMot.rotate(temp);
+          tempf = atof(Words[2]);
+          DEBUG_PRINTLN(tempf);
+          yawMot.rotate(tempf);
         }
       }
       else if(strcmp(Words[1],"rpm") == 0){
@@ -708,10 +713,9 @@ void simpleScan(char* skipVar) {
     
     for(float j=startOffset; j<maxPitchDeg; j=j+skipDeg){
       //move pitch motor
-      //pitchMot.move(currDir*skipPitch);
-      //pitchMot.rotate(startOffset);
+      //pitchMot.rotate(startOffset); // This worked above...
       pitchMot.rotate(currDir*skipDeg); // Don't know why this isn't working.
-      //pitchMot.rotate(skipDeg);
+      //pitchMot.rotate(skipDeg); // Still doesn't work here.
       
       //take a reading
       lidarError = lidarOnce();
@@ -729,21 +733,6 @@ void simpleScan(char* skipVar) {
         file.print(reading.intensity);
         file.print("\n");
       }
-      //Controller.spinOnce();
-      //delayMicroseconds(shotMicroDelay);
-      //reading.radius = LZ1.distance;
-      //reading.radius = LZ1.distance - 2; //offset for lidar lite mount
-      //reading.pitch = j;
-      //reading.yaw = i;
-
-      //file.print(reading.radius);
-      //file.print(",");
-      //file.print(reading.yaw);
-      //file.print(",");
-      //file.print(reading.pitch);
-      //file.print(",");
-      //file.print(reading.intensity);
-      //file.print("\n");
     }
     // after pitch done change direction of pitch
     currDir = -1.0*currDir;
