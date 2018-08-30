@@ -9,6 +9,27 @@ The current status of the software is that it is capable of:
 - Receiving a few commands from a computer/phone over bluetooth
 - Creating a unique file name on the SD card
 
+Bluetooth commands:
+- cancel;
+- pitch turn <float>;
+- pitch rpm <int>;
+- pitch microstep <int>;
+- pitch enable;
+- pitch disable;
+- yaw turn <float>;
+- yaw rpm <int>;
+- yaw microstep <int>;
+- yaw enable;
+- yaw disable;
+- yaw max <int>;
+- lidar dist;
+- lidar scan;
+- lidar test;
+- bluetooth; (not used yet)
+- sd test <string>;
+- motor enable;
+- motor disable;
+
 Future items needed
 - Interfacing over bluetooth
 - Reading data from the Lidar Lite V3 module
