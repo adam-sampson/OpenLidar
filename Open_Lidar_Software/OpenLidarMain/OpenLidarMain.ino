@@ -61,13 +61,12 @@
   */
 
 // Define Libraries
-#include <DRV8825.h>
-// #include <Wire.h>
-#include <i2c_t3.h>
-#include <I2CFunctions.h> 
-#include <LidarObject.h>
-#include <LidarController.h>
-#include "SdFat.h"
+#include <DRV8825.h>          // Pololu motor driver library
+#include <i2c_t3.h>           // Wire.h functions for the 32 bit teensy 3.5
+#include <I2CFunctions.h>     // EnhancedLidar library
+#include <LidarObject.h>      // EnhancedLidar library
+#include <LidarController.h>  // EnhancedLidar library
+#include "SdFat.h"            // SD card library
 
 // Define whether or not to use DEBUG mode
 #define DEBUG
@@ -107,6 +106,8 @@ boolean cancel = false; // Functions that allow cancel will check for this flag 
 #define Z1_LASER_AD 0x62
 
 #define NUMBER_OF_LASERS 1
+
+#define GIMBAL_OFFSET 2
 
 // Delays
 long currMicro, lastMicro;
@@ -206,7 +207,8 @@ void setup() {
 
   //setup sd card
   if (!sd.begin()) {
-    sd.initErrorHalt();
+    DEBUG_PRINTLN("Unable to begin SD card. Power off, check SD card, and try again.");
+    //sd.initErrorHalt();
   }
 
   mySerial.println(F("OpenLidar Ready."));
@@ -234,7 +236,9 @@ void findFileName(){
   // Find an unused file name.
   uint8_t BASE_NAME_SIZE = sizeof(FILE_BASE_NAME) - 1;
   if (BASE_NAME_SIZE > 6) {
-    error("FILE_BASE_NAME too long");
+    DEBUG_PRINTLN("FILE_BASE_NAME too long");
+    return;
+    //error("FILE_BASE_NAME too long");
   }
   while (sd.exists(fileName)) {
     if (fileName[BASE_NAME_SIZE + 2] != '9') {
@@ -246,7 +250,8 @@ void findFileName(){
       fileName[BASE_NAME_SIZE + 1] = '0';
       fileName[BASE_NAME_SIZE]++;
     } else {
-      error("Can't create file name");
+      DEBUG_PRINTLN("Can't create file name.");
+      //error("Can't create file name");
     }
   }
 }
@@ -492,7 +497,7 @@ void testSD(char* inText){
   char testFile[10] = "test.txt";
   if (!file.open(testFile, O_CREAT | O_WRITE | O_EXCL)) {
     DEBUG_PRINTLN("Error Opening File");
-    error("file.open");
+    //error("file.open");
     return;
   }
   
@@ -572,7 +577,7 @@ void simpleScan(char* skipVar) {
   // Open the file for writing
   if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL)) {
     DEBUG_PRINTLN("Error Opening File");
-    error("file.open");
+    //error("file.open");
     return;
   }
   
@@ -626,6 +631,7 @@ void simpleScan(char* skipVar) {
     if(lidarError){
       countError++;
     }
+    lidarError = false;
   }
 
   DEBUG_PRINT("Warmup and Clearing Controller took: ");
@@ -640,11 +646,12 @@ void simpleScan(char* skipVar) {
   //delayMicroseconds(shotMicroDelay);
   lidarError = lidarOnce();
     if(!lidarError){
-      reading.radius = LZ1.distance - 2; //offset for lidar lite mount
+      reading.radius = LZ1.distance - GIMBAL_OFFSET; //offset for lidar lite mount
       reading.intensity = LZ1.strength;
       reading.pitch = 360.0*(float)(startOffset)/float(pitch.steps*pitch.microstep);
       reading.yaw = 0.0;
     }
+    
   
   DEBUG_PRINT("First Lidar Shot took: ");
   DEBUG_PRINTLN(micros()-lastMicro);
@@ -664,6 +671,7 @@ void simpleScan(char* skipVar) {
   else {
     DEBUG_PRINTLN("Unable to write to SD because of lidar error.");
   }
+  lidarError = false;
   
   //write to sd card
   // Convert to bytes
@@ -673,7 +681,7 @@ void simpleScan(char* skipVar) {
 
   DEBUG_PRINT("First SD write took: ");
   DEBUG_PRINTLN(micros()-lastMicro);
-
+  //file.close();
   lastMicro = micros();
   
   // for each yaw
@@ -684,9 +692,15 @@ void simpleScan(char* skipVar) {
     checkSerial();
     if(cancel){ 
       file.close();
+      disableMotors();
       return; 
     }
-    
+    // Open the file for writing
+    //if (!file.open(fileName, FILE_WRITE)) {
+    //  DEBUG_PRINTLN("Error Opening File");
+    //  //error("file.open");
+    //  return;
+    //}
     // Clear lidar buffer
     Controller.spinOnce();
     delayMicroseconds(shotMicroDelay);
@@ -720,7 +734,7 @@ void simpleScan(char* skipVar) {
       //take a reading
       lidarError = lidarOnce();
       if(!lidarError){
-        reading.radius = LZ1.distance - 2; //offset for lidar lite mount
+        reading.radius = LZ1.distance - GIMBAL_OFFSET; //offset for lidar lite mount
         reading.intensity = LZ1.strength;
         reading.pitch = j;
         reading.yaw = i;
@@ -733,11 +747,18 @@ void simpleScan(char* skipVar) {
         file.print(reading.intensity);
         file.print("\n");
       }
+      lidarError = false;
     }
+    
     // after pitch done change direction of pitch
     currDir = -1.0*currDir;
     //move yaw motor
     yawMot.rotate(skipDeg);
+    //file.close(); // Close file each time to prevent losing data...to be changed later.
+    // Every fourth yaw movement, flush to the file
+    if(fmod(i,(4*skipDeg)) == 0) {
+      file.flush(); // Force SD to save data to disk so data isn't lost upon a crash...
+    }
   }
 
   // close SD file
