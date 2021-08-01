@@ -12,28 +12,23 @@ The original project had both hardware and software issues and was scrapped for 
 The change in case hardware, microchip used, lidar sensor, and yaw motor assembly all necessitated a full rework of the project here.
 
 The current state of the hardware:
-- Case parts have been designed for printing on a 3D printer
-- Through hole sizes for screws need to be fixed (currently has to be drilled)
-- Through hole size for slip rings needs to be fixed (currently has to be drilled)
-- Redesign of the lidar mount needed for wire routing (and to make it smaller)
-- Wire routing inside the main body needs to be added
-- Redesign of the yaw axis is desired (but not necessary) to make assembly easier
+- Yaw axis has been completely redesigned to use 30mm shaft through bearing for greater stability
+- Pitch axis has been completely redesigned to use "fieldgoal" design to reduce friction and complexity of shaft
+- Case parts have been modeled in Fusion 360 but need to finish printing/testing
+- Re-selected new hardware to make use of S42B stepper drivers for simplicity and servo-like capabilities
 
 The current status of the software is that it is capable of:
-- Controlling 2 stepper motors (upgraded since last model)
+- Capturing data from LidarLitev3 using enhanced library for speeds of up to 2000/s (with ideal I2C conditions)
+- Controlling 2 stepper motors 
 - Receiving commands and outputing results over serial
-- Receiving a few commands from a computer/phone over bluetooth
-- Creating a unique file name on the SD card
+- Write to SD card
 
 Future items needed
-- Interfacing over bluetooth
-- Reading data from the Lidar Lite V3 module
-- Writing to a microSD card
-- Create a new scan room function
-- Add filter to prevent scanRoom from over-sampling near polar regions
+- Scan Mode to prevent scanRoom from over-sampling near polar regions
 - Add ability to read/write settings to ROM
 - Add ability to change default settings
 - Create progress indicators and time estimates
 - Add ability to save as E57 point cloud file
+- Add ability to save as xyz point cloud file
 - Add routine for identifying 0 degrees
 - Add ability to create custom filename (i.e. date and time)
