@@ -2,6 +2,10 @@
 
 This section contains the hardware files for the Open Lidar project.
 
+Fusion 360 files are provided as .f3d files. 
+
+Print ready files are provided as .stl files. 
+
 # 3D Printed Case
 
 - LidarLite mount (printed and fitted)
